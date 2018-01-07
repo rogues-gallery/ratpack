@@ -23,6 +23,7 @@ import ratpack.exec.Blocking
 import ratpack.exec.Promise
 import ratpack.groovy.test.embed.GroovyEmbeddedApp
 import ratpack.handling.Context
+import ratpack.http.Request
 import ratpack.http.client.HttpClient
 import ratpack.http.client.HttpClientReadTimeoutException
 import ratpack.http.client.ReceivedResponse
@@ -58,6 +59,18 @@ class RatpackRetrofitSpec extends Specification {
 
     @GET("/error")
     Promise<Response<String>> errorResponse()
+
+    @GET("/")
+    @RequestOptions(connectTimeoutInMillis = 1000, readTimeoutInMillis = 1000)
+    Promise<String> rootWithOptions()
+
+    @GET("/")
+    @RequestOptions(connectTimeoutInMillis = 1000, readTimeoutInMillis = 1000)
+    Promise<Response<String>> rootResponseWithOptions()
+
+    @GET("/")
+    @RequestOptions(connectTimeoutInMillis = 1000, readTimeoutInMillis = 1000)
+    Promise<ReceivedResponse> rawResponseWithOptions()
   }
 
   Service service
@@ -186,13 +199,63 @@ class RatpackRetrofitSpec extends Specification {
   }
 
   @Unroll
+  def "test client read timeout returning Response - #readTimeout"() {
+    given:
+    def otherApp = GroovyEmbeddedApp.of {
+      registryOf { add ServerErrorHandler, new DefaultDevelopmentErrorHandler() }
+      handlers {
+        get {
+          render Blocking.get {
+            sleep 3000
+            "OK"
+          }
+        }
+      }
+    }
+
+    and:
+    def builder = RatpackRetrofit
+      .client(otherApp.address)
+      .httpClient {
+        return client()
+      }
+    if (readTimeout != null) {
+      builder.httpClient {
+        HttpClient.of {
+          it.byteBufAllocator(UnpooledByteBufAllocator.DEFAULT)
+          it.maxContentLength(ServerConfig.DEFAULT_MAX_CONTENT_LENGTH)
+          it.connectTimeout(Duration.ofMillis(3000))
+          it.readTimeout(Duration.ofMillis(readTimeout))
+        }
+      }
+    }
+    service = builder.build(Service)
+
+    when:
+    ExecHarness.yieldSingle(setup) {
+      service.rootResponse()
+    }.valueOrThrow
+
+    then:
+    def e = thrown(HttpClientReadTimeoutException)
+    if (readTimeout != null) {
+      assert e.message == "Read timeout (PT1S) waiting on HTTP server at $otherApp.address"
+    } else {
+      assert e.message == "Read timeout (PT3S) waiting on HTTP server at $otherApp.address"
+    }
+
+    where:
+    readTimeout << [1000, null]
+  }
+
+  @Unroll
   def "test client connect timeout returning Response - #connectTimeout"() {
     given:
     def builder = RatpackRetrofit
       .client("http://ratpack.io:65535")
       .httpClient {
-      return client()
-    }
+        return client()
+      }
     if (connectTimeout != null) {
       builder.httpClient {
         HttpClient.of {
@@ -241,8 +304,8 @@ class RatpackRetrofitSpec extends Specification {
     def builder = RatpackRetrofit
       .client(otherApp.address)
       .httpClient {
-      return client()
-    }
+        return client()
+      }
     if (readTimeout != null) {
       builder.httpClient {
         HttpClient.of {
@@ -310,7 +373,7 @@ class RatpackRetrofitSpec extends Specification {
   }
 
   @Unroll
-  def "test client read timeout returning Response - #readTimeout"() {
+  def "test client read timeout returning ReceivedResponse - #readTimeout"() {
     given:
     def otherApp = GroovyEmbeddedApp.of {
       registryOf { add ServerErrorHandler, new DefaultDevelopmentErrorHandler() }
@@ -344,7 +407,7 @@ class RatpackRetrofitSpec extends Specification {
 
     when:
     ExecHarness.yieldSingle(setup) {
-      service.rootResponse()
+      service.rawResponse()
     }.valueOrThrow
 
     then:
@@ -365,8 +428,8 @@ class RatpackRetrofitSpec extends Specification {
     def builder = RatpackRetrofit
       .client("http://ratpack.io:65535")
       .httpClient {
-      return client()
-    }
+        return client()
+      }
     if (connectTimeout != null) {
       builder.httpClient {
         HttpClient.of {
@@ -396,8 +459,7 @@ class RatpackRetrofitSpec extends Specification {
     connectTimeout << [1000, null]
   }
 
-  @Unroll
-  def "test client read timeout returning ReceivedResponse - #readTimeout"() {
+  def "test client read timeout options returning Response"() {
     given:
     def otherApp = GroovyEmbeddedApp.of {
       registryOf { add ServerErrorHandler, new DefaultDevelopmentErrorHandler() }
@@ -415,34 +477,141 @@ class RatpackRetrofitSpec extends Specification {
     def builder = RatpackRetrofit
       .client(otherApp.address)
       .httpClient {
-      return client()
-    }
-    if (readTimeout != null) {
-      builder.httpClient {
-        HttpClient.of {
-          it.byteBufAllocator(UnpooledByteBufAllocator.DEFAULT)
-          it.maxContentLength(ServerConfig.DEFAULT_MAX_CONTENT_LENGTH)
-          it.connectTimeout(Duration.ofMillis(3000))
-          it.readTimeout(Duration.ofMillis(readTimeout))
-        }
+        return client()
       }
-    }
+
     service = builder.build(Service)
 
     when:
     ExecHarness.yieldSingle(setup) {
-      service.rawResponse()
+      service.rootResponseWithOptions()
     }.valueOrThrow
 
     then:
     def e = thrown(HttpClientReadTimeoutException)
-    if (readTimeout != null) {
-      assert e.message == "Read timeout (PT1S) waiting on HTTP server at $otherApp.address"
-    } else {
-      assert e.message == "Read timeout (PT3S) waiting on HTTP server at $otherApp.address"
+    assert e.message == "Read timeout (PT1S) waiting on HTTP server at $otherApp.address"
+  }
+
+  def "test client connect timeout options returning Response"() {
+    given:
+    def builder = RatpackRetrofit
+      .client("http://ratpack.io:65535")
+      .httpClient {
+        return client()
+      }
+
+    service = builder.build(Service)
+
+    when:
+    ExecHarness.yieldSingle(setup) {
+      service.rootResponseWithOptions()
+    }.valueOrThrow
+
+    then:
+    def e = thrown(ConnectException)
+    assert e.message == "Connect timeout (PT1S) connecting to http://ratpack.io:65535/"
+  }
+
+  def "test client read timeout options returning Object"() {
+    given:
+    def otherApp = GroovyEmbeddedApp.of {
+      registryOf { add ServerErrorHandler, new DefaultDevelopmentErrorHandler() }
+      handlers {
+        get {
+          render Blocking.get {
+            sleep 3000
+            "OK"
+          }
+        }
+      }
     }
 
-    where:
-    readTimeout << [1000, null]
+    and:
+    def builder = RatpackRetrofit
+      .client(otherApp.address)
+      .httpClient {
+        return client()
+      }
+    service = builder.build(Service)
+
+    when:
+    ExecHarness.yieldSingle(setup) {
+      service.rootWithOptions()
+    }.valueOrThrow
+
+    then:
+    def e = thrown(HttpClientReadTimeoutException)
+    assert e.message == "Read timeout (PT1S) waiting on HTTP server at $otherApp.address"
+  }
+
+  def "test client connect timeout options returning Object"() {
+    given:
+    def builder = RatpackRetrofit
+      .client("http://ratpack.io:65535")
+      .httpClient {
+        return client()
+      }
+
+    service = builder.build(Service)
+
+    when:
+    ExecHarness.yieldSingle(setup) {
+      service.rootWithOptions()
+    }.valueOrThrow
+
+    then:
+    def e = thrown(ConnectException)
+    assert e.message == "Connect timeout (PT1S) connecting to http://ratpack.io:65535/"
+  }
+
+  def "test client read timeout options returning ReceivedResponse"() {
+    given:
+    def otherApp = GroovyEmbeddedApp.of {
+      registryOf { add ServerErrorHandler, new DefaultDevelopmentErrorHandler() }
+      handlers {
+        get {
+          render Blocking.get {
+            sleep 3000
+            "OK"
+          }
+        }
+      }
+    }
+
+    and:
+    def builder = RatpackRetrofit
+      .client(otherApp.address)
+      .httpClient {
+        return client()
+      }
+    service = builder.build(Service)
+
+    when:
+    ExecHarness.yieldSingle(setup) {
+      service.rawResponseWithOptions()
+    }.valueOrThrow
+
+    then:
+    def e = thrown(HttpClientReadTimeoutException)
+    assert e.message == "Read timeout (PT1S) waiting on HTTP server at $otherApp.address"
+  }
+
+  def "test client connect timeout options returning ReceivedResponse"() {
+    given:
+    def builder = RatpackRetrofit
+      .client("http://ratpack.io:65535")
+      .httpClient {
+        return client()
+      }
+    service = builder.build(Service)
+
+    when:
+    ExecHarness.yieldSingle(setup) {
+      service.rawResponseWithOptions()
+    }.valueOrThrow
+
+    then:
+    def e = thrown(ConnectException)
+    assert e.message == "Connect timeout (PT1S) connecting to http://ratpack.io:65535/"
   }
 }

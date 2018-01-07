@@ -25,6 +25,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
  * Configure the options for the underlying {@link ratpack.http.client.HttpClient} when making a request using this client.
+ *
  * @see RatpackRetrofit
  * @since 1.6
  */
@@ -38,12 +39,12 @@ public @interface RequestOptions {
    *
    * @return the configured connection timeout in milliseconds
    */
-  long connectTimeoutInMillis() default -1;
+  int connectTimeoutInMillis() default -1;
 
   /**
    * If non-zero, configures the underlying {@link ratpack.http.client.RequestSpec} with the specified read timeout in milliseconds.
    *
    * @return the configured read timeout in milliseconds
    */
-  long readTimeoutInMillis() default -1;
+  int readTimeoutInMillis() default -1;
 }
