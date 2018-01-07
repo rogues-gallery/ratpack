@@ -27,11 +27,13 @@ import ratpack.http.MutableHeaders;
 import ratpack.http.client.HttpClient;
 import ratpack.http.client.ReceivedResponse;
 import ratpack.http.client.RequestSpec;
+import ratpack.retrofit.RequestOptions;
 
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static ratpack.util.Exceptions.uncheck;
 
@@ -56,10 +58,16 @@ public class RatpackCallFactory implements okhttp3.Call.Factory {
 
     private final Request request;
     private final ratpack.func.Factory<? extends HttpClient> clientFactory;
+    private Optional<RequestOptions> requestOptions = Optional.empty();
 
     public RatpackCall(Request request, ratpack.func.Factory<? extends HttpClient> clientFactory) {
       this.request = request;
       this.clientFactory = clientFactory;
+    }
+
+    public RatpackCall with(Optional<RequestOptions> requestOptions) {
+      this.requestOptions = requestOptions;
+      return this;
     }
 
     @Override
