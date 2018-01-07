@@ -30,6 +30,7 @@ import ratpack.http.client.RequestSpec;
 import ratpack.retrofit.RequestOptions;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -105,6 +106,14 @@ public class RatpackCallFactory implements okhttp3.Call.Factory {
       if (request.body() != null) {
         spec.body(this::configureBody);
       }
+      requestOptions.ifPresent(options -> {
+        if (options.connectTimeoutInMillis() > -1) {
+          spec.connectTimeout(Duration.ofMillis(options.connectTimeoutInMillis()));
+        }
+        if (options.readTimeoutInMillis() > -1) {
+          spec.readTimeout(Duration.ofMillis(options.readTimeoutInMillis()));
+        }
+      });
     }
 
     private void configureHeaders(MutableHeaders h) {
