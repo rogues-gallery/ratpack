@@ -21,7 +21,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpObjectAggregator;
 import ratpack.exec.Downstream;
 import ratpack.exec.Execution;
 import ratpack.exec.Upstream;
@@ -42,7 +41,7 @@ class ContentAggregatingRequestAction extends RequestActionSupport<ReceivedRespo
     int redirectCount,
     Execution execution,
     Action<? super RequestSpec> requestConfigurer
-  ) {
+  ) throws Exception {
     super(uri, client, redirectCount, execution, requestConfigurer);
   }
 
@@ -55,7 +54,7 @@ class ContentAggregatingRequestAction extends RequestActionSupport<ReceivedRespo
 
   @Override
   protected void addResponseHandlers(ChannelPipeline p, Downstream<? super ReceivedResponse> downstream) {
-    p.addLast(AGGREGATOR_HANDLER_NAME, new HttpObjectAggregator(requestConfig.maxContentLength));
+    p.addLast(AGGREGATOR_HANDLER_NAME, new NoContentLengthOnNoBodyHttpObjectAggregator(requestConfig.maxContentLength));
     p.addLast(RESPONSE_HANDLER_NAME, new SimpleChannelInboundHandler<FullHttpResponse>(false) {
 
       @Override
@@ -74,14 +73,15 @@ class ContentAggregatingRequestAction extends RequestActionSupport<ReceivedRespo
 
       @Override
       public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        forceDispose(ctx.pipeline());
+        cause = decorateException(cause);
         error(downstream, cause);
+        forceDispose(ctx.pipeline());
       }
     });
   }
 
   @Override
-  protected Upstream<ReceivedResponse> onRedirect(URI locationUrl, int redirectCount, Action<? super RequestSpec> redirectRequestConfig) {
+  protected Upstream<ReceivedResponse> onRedirect(URI locationUrl, int redirectCount, Action<? super RequestSpec> redirectRequestConfig) throws Exception {
     return new ContentAggregatingRequestAction(locationUrl, client, redirectCount, execution, redirectRequestConfig);
   }
 

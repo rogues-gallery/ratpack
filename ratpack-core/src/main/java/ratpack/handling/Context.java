@@ -27,6 +27,7 @@ import ratpack.file.FileSystemBinding;
 import ratpack.file.MimeTypes;
 import ratpack.func.Action;
 import ratpack.handling.direct.DirectChannelAccess;
+import ratpack.http.ClientErrorException;
 import ratpack.http.MutableHeaders;
 import ratpack.http.Request;
 import ratpack.http.Response;
@@ -241,44 +242,7 @@ public interface Context extends Registry {
 
   /**
    * Respond to the request based on the requested content type (i.e. the request Accept header).
-   * <p>
-   * This is useful when a given handler can provide content of more than one type (i.e. <a href="http://en.wikipedia.org/wiki/Content_negotiation">content negotiation</a>).
-   * <p>
-   * The handler to use will be selected based on parsing the "Accept" header, respecting quality weighting and wildcard matching.
-   * The order that types are specified is significant for wildcard matching.
-   * The earliest registered type that matches the wildcard will be used.
-   *
-   * <pre class="java">{@code
-   * import ratpack.test.embed.EmbeddedApp;
-   * import ratpack.http.client.ReceivedResponse;
-   *
-   * import static org.junit.Assert.*;
-   *
-   * public class Example {
-   *   public static void main(String[] args) throws Exception {
-   *     EmbeddedApp.fromHandler(ctx -> {
-   *       String message = "hello!";
-   *       ctx.byContent(m -> m
-   *         .json(() -> ctx.render("{\"msg\": \"" + message + "\"}"))
-   *         .html(() -> ctx.render("<p>" + message + "</p>"))
-   *       );
-   *     }).test(httpClient -> {
-   *       ReceivedResponse response = httpClient.requestSpec(s -> s.getHeaders().add("Accept", "application/json")).get();
-   *       assertEquals("{\"msg\": \"hello!\"}", response.getBody().getText());
-   *       assertEquals("application/json", response.getBody().getContentType().getType());
-   *
-   *       response = httpClient.requestSpec(s -> s.getHeaders().add("Accept", "text/plain; q=1.0, text/html; q=0.8, application/json; q=0.7")).get();
-   *       assertEquals("<p>hello!</p>", response.getBody().getText());
-   *       assertEquals("text/html", response.getBody().getContentType().getType());
-   *     });
-   *   }
-   * }
-   * }</pre>
-   * If there is no type registered, or if the client does not accept any of the given types, by default a {@code 406} will be issued with {@link Context#clientError(int)}.
-   * If you want a different behavior, use {@link ByContentSpec#noMatch}.
-   * <p>
-   * Only the last specified handler for a type will be used.
-   * That is, adding a subsequent handler for the same type will replace the previous.
+   * For more details, see {@link ByContentSpec}.
    *
    * @param action the specification of how to handle the request based on the clients preference of content type
    * @throws Exception any thrown by action
@@ -288,13 +252,19 @@ public interface Context extends Registry {
   // Shorthands for common service lookups
 
   /**
-   * Forwards the exception to the {@link ServerErrorHandler} in this service.
+   * Handles any error thrown during request handling.
    * <p>
-   * The default configuration of Ratpack includes a {@link ServerErrorHandler} in all contexts.
-   * A {@link NotInRegistryException} will only be thrown if a very custom service setup is being used.
+   * Uncaught exceptions that are thrown any time during request handling will end up here.
+   * <p>
+   * Forwards the exception to the {@link ServerErrorHandler} within the current registry.
+   * Add an implementation of this interface to the registry to handle errors.
+   * The default implementation is not suitable for production usage.
+   * <p>
+   * If the exception is-a {@link ClientErrorException},
+   * the {@link #clientError(int)} method will be called with the exception's status code
+   * instead of being forward to the server error handler.
    *
    * @param throwable The exception that occurred
-   * @throws NotInRegistryException if no {@link ServerErrorHandler} can be found in the service
    */
   @NonBlocking
   void error(Throwable throwable);

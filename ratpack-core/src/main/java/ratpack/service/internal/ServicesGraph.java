@@ -87,7 +87,7 @@ public class ServicesGraph {
           s -> node.getImplClass().isInstance(s),
           s -> {
             for (Class<?> dependencyType : dependsOn.value()) {
-              if (dependencyType.isInstance(s)) {
+              if (dependencyType.isInstance(unpackIfLegacy(s))) {
                 return true;
               }
             }
@@ -121,6 +121,7 @@ public class ServicesGraph {
     startLatch.await();
     StartupFailureException startupFailureException = failureRef.get();
     if (startupFailureException != null) {
+      LOGGER.error("Startup failure", startupFailureException);
       stop(new DefaultEvent(startEvent.getRegistry(), false));
       throw startupFailureException;
     }

@@ -26,7 +26,6 @@ import ratpack.stream.Streams
 import ratpack.stream.internal.CollectingSubscriber
 import ratpack.test.internal.RatpackGroovyDslSpec
 import ratpack.test.internal.TestByteBufAllocators
-import spock.lang.Unroll
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
@@ -35,7 +34,6 @@ class ServerSentEventStreamEncoderSpec extends RatpackGroovyDslSpec {
 
   def encoder = new ServerSentEventEncoder()
 
-  @Unroll
   def "can encode valid server sent events"() {
     expect:
     encoder.encode(sse, TestByteBufAllocators.LEAKING_UNPOOLED_HEAP).toString(CharsetUtil.UTF_8) == expectedEncoding
@@ -56,6 +54,26 @@ class ServerSentEventStreamEncoderSpec extends RatpackGroovyDslSpec {
     serverSentEvent { it.id("fooId") }                                                              | "id: fooId\n\n"
     serverSentEvent { it.id("fooId").event("fooType") }                                             | "id: fooId\nevent: fooType\n\n"
     serverSentEvent { it.event("fooType") }                                                         | "event: fooType\n\n"
+    serverSentEvent { it.data("foo\nbar") }                                                         | "data: foo\ndata: bar\n\n"
+    serverSentEvent { it.data("foo\n") }                                                            | "data: foo\ndata: \n\n"
+    serverSentEvent { it.comment("this is a \n comment").data("foo\n") }                            | ": this is a \n:  comment\ndata: foo\ndata: \n\n"
+    serverSentEvent { it.comment("comment") }                                                       | ": comment\n\n"
+  }
+
+  def "errors if id contains newline"() {
+    when:
+    serverSentEvent { it.id("foo\nbar") }
+
+    then:
+    thrown IllegalArgumentException
+  }
+
+  def "errors if event contains newline"() {
+    when:
+    serverSentEvent { it.event("foo\nbar") }
+
+    then:
+    thrown IllegalArgumentException
   }
 
   public <T> Event serverSentEvent(T t, Action<? super Event> action) {
@@ -80,4 +98,5 @@ class ServerSentEventStreamEncoderSpec extends RatpackGroovyDslSpec {
     latch.await()
     ref.get().valueOrThrow
   }
+
 }

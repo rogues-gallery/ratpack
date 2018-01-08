@@ -219,7 +219,9 @@ public abstract class Guice {
 
     ServerConfig serverConfig = baseRegistry.get(ServerConfig.class);
     BindingsSpec bindings = new DefaultBindingsSpec(serverConfig, binderActions, modules);
-    bindings.module(new RatpackBaseRegistryModule(baseRegistry));
+
+    modules.add(new RatpackBaseRegistryModule(baseRegistry));
+    modules.add(new ConfigModule(serverConfig.getRequiredConfig()));
 
     try {
       bindingsAction.execute(bindings);
@@ -228,7 +230,6 @@ public abstract class Guice {
     }
 
     modules.add(new AdHocModule(binderActions));
-    modules.add(new ConfigModule(serverConfig.getRequiredConfig()));
 
     Optional<BindingsImposition> bindingsImposition = Impositions.current().get(BindingsImposition.class);
     if (bindingsImposition.isPresent()) {
@@ -274,6 +275,7 @@ public abstract class Guice {
 
     @Override
     public void configure(Binder binder) {
+
       for (ConfigObject<?> configObject : config) {
         bind(binder, configObject);
       }

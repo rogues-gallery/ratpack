@@ -74,7 +74,7 @@ public abstract class ServerRegistry {
     try {
       userRegistry = userRegistryFactory.apply(baseRegistry);
     } catch (Exception e) {
-      Throwables.propagateIfPossible(e);
+      Throwables.throwIfUnchecked(e);
       throw new StartupFailureException("Failed to build user registry", e);
     }
     return userRegistry;
@@ -100,7 +100,7 @@ public abstract class ServerRegistry {
         .add(MimeTypes.class, ActivationBackedMimeTypes.INSTANCE)
         .add(PublicAddress.class, Optional.ofNullable(serverConfig.getPublicAddress())
           .map(PublicAddress::of)
-          .orElseGet(() -> PublicAddress.inferred(serverConfig.getSslContext() == null ? HTTP_SCHEME : HTTPS_SCHEME))
+          .orElseGet(() -> PublicAddress.inferred(serverConfig.getNettySslContext() == null ? HTTP_SCHEME : HTTPS_SCHEME))
         )
         .add(Redirector.TYPE, Redirector.standard())
         .add(ClientErrorHandler.class, errorHandler)

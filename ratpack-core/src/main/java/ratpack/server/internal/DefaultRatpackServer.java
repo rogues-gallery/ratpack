@@ -24,11 +24,15 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.AttributeKey;
+import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ResourceLeakDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ratpack.api.Nullable;
 import ratpack.exec.Blocking;
 import ratpack.exec.Promise;
 import ratpack.exec.Throttle;
@@ -38,6 +42,7 @@ import ratpack.func.Action;
 import ratpack.func.Function;
 import ratpack.handling.Handler;
 import ratpack.handling.HandlerDecorator;
+import ratpack.http.internal.ConnectionIdleTimeout;
 import ratpack.impose.Impositions;
 import ratpack.impose.UserRegistryImposition;
 import ratpack.registry.Registry;
@@ -51,7 +56,6 @@ import ratpack.util.Exceptions;
 import ratpack.util.Types;
 import ratpack.util.internal.ChannelImplDetector;
 
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import java.net.InetSocketAddress;
 import java.util.Optional;
@@ -62,6 +66,7 @@ import static ratpack.util.Exceptions.uncheck;
 public class DefaultRatpackServer implements RatpackServer {
 
   public static final TypeToken<ReloadInformant> RELOAD_INFORMANT_TYPE = Types.token(ReloadInformant.class);
+  public static final AttributeKey<Throttle> CHANNEL_THOTTLE_KEY = AttributeKey.valueOf(DefaultRatpackServer.class, "channelThottle");
 
   static {
     if (System.getProperty("io.netty.leakDetectionLevel", null) == null) {
@@ -85,6 +90,8 @@ public class DefaultRatpackServer implements RatpackServer {
 
   protected boolean useSsl;
   private final Impositions impositions;
+
+  @Nullable
   private Thread shutdownHookThread;
 
   public DefaultRatpackServer(Action<? super RatpackServerSpec> definitionFactory, Impositions impositions) throws Exception {
@@ -100,48 +107,58 @@ public class DefaultRatpackServer implements RatpackServer {
       return;
     }
 
-    ServerConfig serverConfig;
+    try {
+      ServerConfig serverConfig;
 
-    LOGGER.info("Starting server...");
+      LOGGER.info("Starting server...");
 
-    DefinitionBuild definitionBuild = buildUserDefinition();
-    if (definitionBuild.error != null) {
-      if (definitionBuild.getServerConfig().isDevelopment()) {
-        LOGGER.warn("Exception raised getting server config (will use default config until reload):", definitionBuild.error);
-        needsReload.set(true);
-      } else {
-        throw Exceptions.toException(definitionBuild.error);
-      }
-    }
-
-    serverConfig = definitionBuild.getServerConfig();
-    execController = new DefaultExecController(serverConfig.getThreads());
-    ChannelHandler channelHandler = ThreadBinding.bindFor(true, execController, () -> buildHandler(definitionBuild));
-    channel = buildChannel(serverConfig, channelHandler);
-
-    boundAddress = (InetSocketAddress) channel.localAddress();
-
-    String startMessage = String.format("Ratpack started %sfor %s://%s:%s", serverConfig.isDevelopment() ? "(development) " : "", getScheme(), getBindHost(), getBindPort());
-
-    if (Slf4jNoBindingDetector.isHasBinding()) {
-      if (LOGGER.isInfoEnabled()) {
-        LOGGER.info(startMessage);
-      }
-    } else {
-      System.out.println(startMessage);
-    }
-
-    shutdownHookThread = new Thread("ratpack-shutdown-thread") {
-      @Override
-      public void run() {
-        try {
-          DefaultRatpackServer.this.stop();
-        } catch (Exception ignored) {
-          ignored.printStackTrace(System.err);
+      DefinitionBuild definitionBuild = buildUserDefinition();
+      if (definitionBuild.error != null) {
+        if (definitionBuild.getServerConfig().isDevelopment()) {
+          LOGGER.warn("Exception raised getting server config (will use default config until reload):", definitionBuild.error);
+          needsReload.set(true);
+        } else {
+          throw Exceptions.toException(definitionBuild.error);
         }
       }
-    };
-    Runtime.getRuntime().addShutdownHook(shutdownHookThread);
+
+      serverConfig = definitionBuild.getServerConfig();
+      execController = new DefaultExecController(serverConfig.getThreads());
+      ChannelHandler channelHandler = ThreadBinding.bindFor(true, execController, () -> buildHandler(definitionBuild));
+      channel = buildChannel(serverConfig, channelHandler);
+
+      boundAddress = (InetSocketAddress) channel.localAddress();
+
+      String startMessage = String.format("Ratpack started %sfor %s://%s:%s", serverConfig.isDevelopment() ? "(development) " : "", getScheme(), getBindHost(), getBindPort());
+
+      if (Slf4jNoBindingDetector.isHasBinding()) {
+        if (LOGGER.isInfoEnabled()) {
+          LOGGER.info(startMessage);
+        }
+      } else {
+        System.out.println(startMessage);
+      }
+
+      if (serverConfig.isRegisterShutdownHook()) {
+        shutdownHookThread = new Thread("ratpack-shutdown-thread") {
+          @Override
+          public void run() {
+            try {
+              DefaultRatpackServer.this.stop();
+            } catch (Exception ignored) {
+              ignored.printStackTrace(System.err);
+            }
+          }
+        };
+        Runtime.getRuntime().addShutdownHook(shutdownHookThread);
+      }
+    } catch (Exception e) {
+      if (execController != null) {
+        execController.close();
+      }
+      stop();
+      throw e;
+    }
   }
 
   private static class DefinitionBuild {
@@ -204,8 +221,7 @@ public class DefaultRatpackServer implements RatpackServer {
 
   protected Channel buildChannel(final ServerConfig serverConfig, final ChannelHandler handlerAdapter) throws InterruptedException {
 
-    SSLContext sslContext = serverConfig.getSslContext();
-    boolean requireClientSslAuth = serverConfig.isRequireClientSslAuth();
+    SslContext sslContext = serverConfig.getNettySslContext();
     this.useSsl = sslContext != null;
 
     ServerBootstrap serverBootstrap = new ServerBootstrap();
@@ -227,6 +243,9 @@ public class DefaultRatpackServer implements RatpackServer {
       serverBootstrap.option(ChannelOption.WRITE_SPIN_COUNT, i);
       serverBootstrap.childOption(ChannelOption.WRITE_SPIN_COUNT, i);
     });
+    serverConfig.getConnectQueueSize().ifPresent(i ->
+      serverBootstrap.option(ChannelOption.SO_BACKLOG, i)
+    );
 
     return serverBootstrap
       .group(execController.getEventLoopGroup())
@@ -237,10 +256,11 @@ public class DefaultRatpackServer implements RatpackServer {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
           ChannelPipeline pipeline = ch.pipeline();
+
+          new ConnectionIdleTimeout(pipeline, serverConfig.getIdleTimeout());
+
           if (sslContext != null) {
-            SSLEngine sslEngine = sslContext.createSSLEngine();
-            sslEngine.setUseClientMode(false);
-            sslEngine.setNeedClientAuth(requireClientSslAuth);
+            SSLEngine sslEngine = sslContext.newEngine(PooledByteBufAllocator.DEFAULT);
             pipeline.addLast("ssl", new SslHandler(sslEngine));
           }
 
@@ -254,6 +274,7 @@ public class DefaultRatpackServer implements RatpackServer {
           pipeline.addLast("deflater", new IgnorableHttpContentCompressor());
           pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
           pipeline.addLast("adapter", handlerAdapter);
+
           ch.config().setAutoRead(false);
         }
       })
@@ -352,6 +373,11 @@ public class DefaultRatpackServer implements RatpackServer {
   }
 
   @Override
+  public Optional<Registry> getRegistry() {
+    return Optional.of(this.serverRegistry);
+  }
+
+  @Override
   public synchronized boolean isRunning() {
     return channel != null;
   }
@@ -383,7 +409,7 @@ public class DefaultRatpackServer implements RatpackServer {
     private DefinitionBuild definitionBuild;
     private final Throttle reloadThrottle = Throttle.ofSize(1);
 
-    private ChannelHandler inner;
+    private ChannelInboundHandlerAdapter inner;
 
     public ReloadHandler(DefinitionBuild definition) {
       super();
@@ -404,12 +430,26 @@ public class DefaultRatpackServer implements RatpackServer {
       super.channelActive(ctx);
     }
 
-    ChannelHandler getDelegate() {
+    ChannelInboundHandlerAdapter getDelegate() {
       return inner;
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+      if (execController == null) {
+        ReferenceCountUtil.release(msg);
+        ctx.fireChannelReadComplete();
+        return;
+      }
+
+      Throttle requestThrottle;
+      if (msg instanceof HttpRequest) {
+        requestThrottle = Throttle.ofSize(1);
+        ctx.channel().attr(CHANNEL_THOTTLE_KEY).set(requestThrottle);
+      } else {
+        requestThrottle = ctx.channel().attr(CHANNEL_THOTTLE_KEY).get();
+      }
+
       execController.fork().eventLoop(ctx.channel().eventLoop()).start(e ->
         Promise.<ChannelHandler>async(f -> {
           boolean rebuild = false;
@@ -450,8 +490,73 @@ public class DefaultRatpackServer implements RatpackServer {
             ctx.pipeline().addLast("inner", r.getValueOrThrow());
           })
           .throttled(reloadThrottle)
+          .throttled(requestThrottle)
           .then(adapter -> ctx.fireChannelRead(msg))
       );
+    }
+
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+      if (inner == null) {
+        super.channelRegistered(ctx);
+      } else {
+        inner.channelRegistered(ctx);
+      }
+    }
+
+    @Override
+    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+      if (inner == null) {
+        super.channelUnregistered(ctx);
+      } else {
+        inner.channelUnregistered(ctx);
+      }
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+      if (inner == null) {
+        super.channelInactive(ctx);
+      } else {
+        inner.channelInactive(ctx);
+      }
+
+    }
+
+    @Override
+    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+      if (inner == null) {
+        super.channelReadComplete(ctx);
+      } else {
+        inner.channelReadComplete(ctx);
+      }
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (inner == null) {
+        super.userEventTriggered(ctx, evt);
+      } else {
+        inner.userEventTriggered(ctx, evt);
+      }
+    }
+
+    @Override
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+      if (inner == null) {
+        super.channelWritabilityChanged(ctx);
+      } else {
+        inner.channelWritabilityChanged(ctx);
+      }
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+      if (inner == null) {
+        super.exceptionCaught(ctx, cause);
+      } else {
+        inner.exceptionCaught(ctx, cause);
+      }
     }
 
     private NettyHandlerAdapter buildErrorRenderingAdapter(Throwable e) {

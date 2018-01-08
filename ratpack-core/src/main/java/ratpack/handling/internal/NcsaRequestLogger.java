@@ -70,7 +70,7 @@ public class NcsaRequestLogger implements RequestLogger {
           request.maybeGet(UserId.class).map(Types::cast),
           request.getTimestamp(),
           request.getMethod(),
-          "/" + request.getPath(),
+          request.getRawUri(),
           request.getProtocol(),
           outcome.getResponse().getStatus(),
           responseSize));
@@ -85,7 +85,7 @@ public class NcsaRequestLogger implements RequestLogger {
 
   String ncsaLogFormat(HostAndPort client, String rfc1413Ident, Optional<CharSequence> userId, Instant timestamp, HttpMethod method, String uri, String httpProtocol, Status status, String responseSize) {
     return String.format("%s %s %s [%s] \"%s %s %s\" %d %s",
-      client.getHostText(),
+      client.getHost(),
       rfc1413Ident,
       userId.orElse("-"),
       FORMATTER.format(timestamp),

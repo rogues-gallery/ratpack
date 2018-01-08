@@ -19,6 +19,8 @@ package ratpack.server;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteSource;
 import com.google.common.reflect.TypeToken;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import ratpack.config.ConfigData;
 import ratpack.config.ConfigDataBuilder;
 import ratpack.config.ConfigSource;
@@ -35,6 +37,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
 
@@ -139,6 +142,18 @@ public interface ServerConfigBuilder extends ConfigDataBuilder {
   ServerConfigBuilder threads(int threads);
 
   /**
+   * Whether or not to register a JVM shutdown hook to gracefully stop the server.
+   * <p>
+   * Default value is {@code true}.
+   *
+   * @param registerShutdownHook whether to register or not
+   * @return {@code this}
+   * @since 1.6
+   * @see ServerConfig#isRegisterShutdownHook()
+   */
+  ServerConfigBuilder registerShutdownHook(boolean registerShutdownHook);
+
+  /**
    * The public address of the application.
    * <p>
    * Default value is {@code null}.
@@ -205,6 +220,16 @@ public interface ServerConfigBuilder extends ConfigDataBuilder {
   ServerConfigBuilder connectTimeoutMillis(int connectTimeoutMillis);
 
   /**
+   * The default read timeout of the channel.
+   *
+   * @param idleTimeout the idleTimeout ({@link Duration#ZERO} = no timeout, must not be negative, must not be null)
+   * @return {@code this}
+   * @see ServerConfig#getIdleTimeout()
+   * @since 1.5
+   */
+  ServerConfigBuilder idleTimeout(Duration idleTimeout);
+
+  /**
    * The maximum number of messages to read per read loop.
    *
    * @param maxMessagesPerRead the max messages per read
@@ -223,6 +248,21 @@ public interface ServerConfigBuilder extends ConfigDataBuilder {
   ServerConfigBuilder receiveBufferSize(int receiveBufferSize);
 
   /**
+   * The maximum amount of connections that may be waiting to be accepted at any time.
+   * <p>
+   * This is effectively the {@code SO_BACKLOG} standard socket parameter.
+   * If the queue is full (i.e. there are too many pending connections), connection attempts will be rejected.
+   * Established connections are not part of this queue so do not contribute towards the limit.
+   * <p>
+   * The default value is platform specific, but usually either 200 or 128.
+   * Most application do not need to change this default.
+   *
+   * @param connectQueueSize connection queue size
+   * @since 1.5
+   */
+  ServerConfigBuilder connectQueueSize(int connectQueueSize);
+
+  /**
    * The maximum loop count for a write operation until <a href="http://docs.oracle.com/javase/7/docs/api/java/nio/channels/WritableByteChannel.html?is-external=true#write(java.nio.ByteBuffer)" target="_blank">WritableByteChannel.write(ByteBuffer)</a> returns a non-zero value.
    *
    * @param writeSpinCount the write spin count
@@ -238,7 +278,9 @@ public interface ServerConfigBuilder extends ConfigDataBuilder {
    * @return {@code this}
    * @see ratpack.ssl.SSLContexts
    * @see ServerConfig#getSslContext()
+   * @deprecated since 1.5, replaced by {@link #ssl(SslContext)}
    */
+  @Deprecated
   ServerConfigBuilder ssl(SSLContext sslContext);
 
   /**
@@ -246,8 +288,20 @@ public interface ServerConfigBuilder extends ConfigDataBuilder {
    *
    * @param requireClientSslAuth whether or not server needs client SSL authentication
    * @return {@code this}
+   * @deprecated since 1.5, prefer {@link #ssl(SslContext)}
    */
+  @Deprecated
   ServerConfigBuilder requireClientSslAuth(boolean requireClientSslAuth);
+
+  /**
+   * The SSL context to use if the application serves content over HTTPS.
+   *
+   * @param sslContext the SSL context
+   * @return {@code this}
+   * @see SslContextBuilder
+   * @since 1.5
+   */
+  ServerConfigBuilder ssl(SslContext sslContext);
 
   /**
    * {@inheritDoc}

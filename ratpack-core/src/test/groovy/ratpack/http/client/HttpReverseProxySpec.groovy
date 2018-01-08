@@ -17,7 +17,8 @@
 package ratpack.http.client
 
 import io.netty.buffer.Unpooled
-import spock.lang.Unroll
+import io.netty.handler.codec.http.HttpResponseStatus
+import ratpack.stream.Streams
 
 import java.util.zip.GZIPInputStream
 
@@ -25,7 +26,6 @@ import static ratpack.http.ResponseChunks.stringChunks
 import static ratpack.http.internal.HttpHeaderConstants.CONTENT_ENCODING
 import static ratpack.stream.Streams.publish
 
-@Unroll
 class HttpReverseProxySpec extends BaseHttpClientSpec {
 
   def "can forward non streamed response as a stream"() {
@@ -68,8 +68,8 @@ class HttpReverseProxySpec extends BaseHttpClientSpec {
     }
     otherApp {
       post {
-        request.body.then {
-          render stringChunks("text/plain", publish([it.text] * 1000))
+        request.body.then { t ->
+          render stringChunks("text/plain", Streams.yield { it.requestNum < 1000 ? t.text : null })
         }
       }
     }
@@ -282,8 +282,7 @@ content-type: text/plain
 content-length: 16
 connection: close
 
-Client error 404
-"""
+Client error 404"""
 
     where:
     pooled << [true, false]
@@ -393,6 +392,36 @@ connection: close
 
     where:
     pooled << [true, false]
+  }
+
+  def "does not add content length for empty upstream #status"() {
+    when:
+    otherApp {
+      get {
+        response.status(status.code()).send()
+      }
+    }
+
+    handlers {
+      get {
+        get(HttpClient).requestStream(otherAppUrl(), {}).then {
+          it.forwardTo(response)
+        }
+      }
+    }
+
+    then:
+    rawResponse() == """HTTP/1.1 ${status}
+connection: close
+
+"""
+
+    where:
+    status << noBodyResponseStatuses()
+  }
+
+  static List<HttpResponseStatus> noBodyResponseStatuses() {
+    [HttpResponseStatus.valueOf(100), HttpResponseStatus.valueOf(150), HttpResponseStatus.valueOf(199), HttpResponseStatus.valueOf(204), HttpResponseStatus.valueOf(304)]
   }
 
 }

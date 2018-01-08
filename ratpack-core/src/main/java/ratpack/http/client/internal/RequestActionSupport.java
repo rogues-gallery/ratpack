@@ -23,9 +23,13 @@ import io.netty.channel.*;
 import io.netty.channel.pool.ChannelPool;
 import io.netty.handler.codec.PrematureChannelClosureException;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
+import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.Future;
 import ratpack.exec.Downstream;
 import ratpack.exec.Execution;
 import ratpack.exec.Upstream;
@@ -38,14 +42,13 @@ import ratpack.http.client.ReceivedResponse;
 import ratpack.http.client.RequestSpec;
 import ratpack.http.internal.*;
 
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLParameters;
 import java.net.URI;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
-
-import static ratpack.util.Exceptions.uncheck;
 
 abstract class RequestActionSupport<T> implements Upstream<T> {
 
@@ -68,9 +71,9 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
   private boolean fired;
   private boolean disposed;
 
-  RequestActionSupport(URI uri, HttpClientInternal client, int redirectCount, Execution execution, Action<? super RequestSpec> requestConfigurer) {
+  RequestActionSupport(URI uri, HttpClientInternal client, int redirectCount, Execution execution, Action<? super RequestSpec> requestConfigurer) throws Exception {
     this.requestConfigurer = requestConfigurer;
-    this.requestConfig = uncheck(() -> RequestConfig.of(uri, client, requestConfigurer));
+    this.requestConfig = RequestConfig.of(uri, client, requestConfigurer);
     this.client = client;
     this.execution = execution;
     this.redirectCount = redirectCount;
@@ -122,14 +125,29 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
 
     addCommonResponseHandlers(channel.pipeline(), downstream);
 
-    channel.writeAndFlush(request).addListener(writeFuture -> {
-      if (!writeFuture.isSuccess()) {
-        error(downstream, writeFuture.cause());
+    Future<?> channelFuture;
+    if (channelKey.ssl) {
+      channelFuture = channel.pipeline().get(SslHandler.class).handshakeFuture();
+    } else {
+      channelFuture = channel.newSucceededFuture();
+    }
+
+    channelFuture.addListener(firstFuture -> {
+      if (firstFuture.isSuccess()) {
+        channel.writeAndFlush(request).addListener(writeFuture -> {
+          if (!writeFuture.isSuccess()) {
+            error(downstream, writeFuture.cause());
+          }
+        });
+      } else {
+        error(downstream, firstFuture.cause());
       }
     });
   }
 
   private void connectFailure(Downstream<? super T> downstream, Throwable e) {
+    ReferenceCountUtil.release(requestConfig.body);
+
     if (e instanceof ConnectTimeoutException) {
       StackTraceElement[] stackTrace = e.getStackTrace();
       e = new ConnectTimeoutException("Connect timeout (" + requestConfig.connectTimeout + ") connecting to " + requestConfig.uri);
@@ -176,11 +194,12 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
       channelPipeline.remove(DECOMPRESS_HANDLER_NAME);
     }
 
-    if (forceClose) {
-      channelPipeline.channel().close();
+    Channel channel = channelPipeline.channel();
+    if (forceClose && channel.isOpen()) {
+      channel.close();
     }
 
-    channelPool.release(channelPipeline.channel());
+    channelPool.release(channel);
   }
 
   private void addCommonResponseHandlers(ChannelPipeline p, Downstream<? super T> downstream) throws Exception {
@@ -191,7 +210,7 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
       p.addLast(SSL_HANDLER_NAME, createSslHandler());
     }
 
-    p.addLast(CLIENT_CODEC_HANDLER_NAME, new HttpClientCodec(4096, 8192, 8192, false));
+    p.addLast(CLIENT_CODEC_HANDLER_NAME, new HttpClientCodec(4096, 8192, requestConfig.responseMaxChunkSize, false));
 
     p.addLast(READ_TIMEOUT_HANDLER_NAME, new ReadTimeoutHandler(requestConfig.readTimeout.toNanos(), TimeUnit.NANOSECONDS));
 
@@ -200,20 +219,8 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
       HttpResponse response;
 
       @Override
-      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        forceDispose(ctx.pipeline());
-
-        if (cause instanceof ReadTimeoutException) {
-          cause = new HttpClientReadTimeoutException("Read timeout (" + requestConfig.readTimeout + ") waiting on HTTP server at " + requestConfig.uri);
-        }
-
-        error(downstream, cause);
-      }
-
-      @Override
       public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        Exception e = new PrematureChannelClosureException("Server " + requestConfig.uri + " closed the connection prematurely");
-        error(downstream, e);
+        ctx.fireExceptionCaught(new PrematureChannelClosureException("Server " + requestConfig.uri + " closed the connection prematurely"));
       }
 
       @Override
@@ -242,7 +249,7 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
                   s.get();
                 }
               };
-              redirectRequestConfig = redirectRequestConfig.append(redirectConfigurer);
+              redirectRequestConfig = redirectConfigurer.append(redirectRequestConfig);
 
               URI locationUrl;
               if (ABSOLUTE_PATTERN.matcher(locationValue).matches()) {
@@ -272,18 +279,29 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
     addResponseHandlers(p, downstream);
   }
 
-  private SslHandler createSslHandler() throws NoSuchAlgorithmException {
+  private SslHandler createSslHandler() throws NoSuchAlgorithmException, SSLException {
     SSLEngine sslEngine;
     if (requestConfig.sslContext != null) {
-      sslEngine = requestConfig.sslContext.createSSLEngine();
+      sslEngine = createSslEngine(requestConfig.sslContext);
     } else {
-      sslEngine = SSLContext.getDefault().createSSLEngine();
+      sslEngine = createSslEngine(SslContextBuilder.forClient().build());
     }
     sslEngine.setUseClientMode(true);
+    SSLParameters sslParameters = sslEngine.getSSLParameters();
+    sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
+    sslEngine.setSSLParameters(sslParameters);
     return new SslHandler(sslEngine);
   }
 
-  protected abstract Upstream<T> onRedirect(URI locationUrl, int redirectCount, Action<? super RequestSpec> redirectRequestConfig);
+  private SSLEngine createSslEngine(SslContext sslContext) {
+    int port = requestConfig.uri.getPort();
+    if (port == -1) {
+      port = 443;
+    }
+    return sslContext.newEngine(client.getByteBufAllocator(), requestConfig.uri.getHost(), port);
+  }
+
+  protected abstract Upstream<T> onRedirect(URI locationUrl, int redirectCount, Action<? super RequestSpec> redirectRequestConfig) throws Exception;
 
   protected void success(Downstream<? super T> downstream, T value) {
     if (!fired) {
@@ -293,7 +311,7 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
   }
 
   protected void error(Downstream<?> downstream, Throwable error) {
-    if (!fired) {
+    if (!fired && !disposed) {
       fired = true;
       downstream.error(error);
     }
@@ -314,6 +332,13 @@ abstract class RequestActionSupport<T> implements Upstream<T> {
 
   private static boolean isRedirect(int code) {
     return code == 301 || code == 302 || code == 303 || code == 307;
+  }
+
+  protected Throwable decorateException(Throwable cause) {
+    if (cause instanceof ReadTimeoutException) {
+      cause = new HttpClientReadTimeoutException("Read timeout (" + requestConfig.readTimeout + ") waiting on HTTP server at " + requestConfig.uri);
+    }
+    return cause;
   }
 
   private static String getFullPath(URI uri) {

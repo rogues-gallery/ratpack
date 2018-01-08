@@ -25,7 +25,6 @@ import ratpack.test.embed.EmbeddedApp
 import ratpack.test.http.TestHttpClient
 import spock.lang.AutoCleanup
 import spock.lang.Specification
-import spock.lang.Timeout
 
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -84,6 +83,23 @@ class RatpackServerTestSpec extends Specification {
     then:
     server.isRunning()
     http.text == "bar"
+  }
+
+  def "access Registry via RatpackServer"() {
+    given:
+    def value = "foo"
+    server = RatpackServer.of {
+      it
+        .serverConfig(ServerConfig.embedded())
+        .registryOf { it.add(String, value) }
+        .handler { return { it.render it.get(String) } as Handler }
+    }
+
+    when:
+    server.start()
+
+    then:
+    server.registry.get().get(String) == "foo"
   }
 
   def "configuration changes are applied up on reload"() {
@@ -236,7 +252,6 @@ class RatpackServerTestSpec extends Specification {
     http.getText("writeSpinCount") == "10"
   }
 
-  @Timeout(5)
   def "handle concurrent requests while in development mode"() {
     given:
     int concurrentRequests = 2

@@ -21,14 +21,12 @@ import io.netty.util.ByteProcessor
 import ratpack.sse.Event
 import ratpack.test.internal.RatpackGroovyDslSpec
 import ratpack.test.internal.TestByteBufAllocators
-import spock.lang.Unroll
 
 class ServerSentEventStreamDecoderSpec extends RatpackGroovyDslSpec {
 
   List<Event<?>> events = []
   def decoder = new ServerSentEventDecoder(TestByteBufAllocators.LEAKING_UNPOOLED_HEAP, events.&add)
 
-  @Unroll
   def "can decode valid server sent event"() {
     given:
     def bytebuf = Unpooled.copiedBuffer(sseStream.bytes)
@@ -59,6 +57,7 @@ class ServerSentEventStreamDecoderSpec extends RatpackGroovyDslSpec {
     "data:\nevent:\n\n"                             | null            | ""                | ""
     "data: foo:data\n\n"                            | null            | null              | "foo:data"
     "data:foo\nbar\n\n"                             | null            | null              | "foo"
+    "data:foo\ndata:\n\n"                           | null            | null              | "foo\n"
   }
 
   def "can decode multiple events"() {
@@ -87,7 +86,6 @@ class ServerSentEventStreamDecoderSpec extends RatpackGroovyDslSpec {
     bytebuf.refCnt() == 0
   }
 
-  @Unroll
   def "can handle when no events"() {
     given:
     def bytebuf = Unpooled.copiedBuffer(sseStream.bytes)

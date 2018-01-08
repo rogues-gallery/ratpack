@@ -17,9 +17,19 @@
 package ratpack.http.client
 
 import io.netty.buffer.ByteBuf
+import io.netty.channel.Channel
 import org.reactivestreams.Subscriber
 import org.reactivestreams.Subscription
 import ratpack.exec.Blocking
+import ratpack.exec.util.ParallelBatch
+import ratpack.http.ResponseChunks
+import ratpack.stream.Streams
+import ratpack.stream.bytebuf.ByteBufStreams
+import ratpack.test.exec.ExecHarness
+
+import java.time.Duration
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 class HttpClientResponseStreamingSpec extends BaseHttpClientSpec {
 
@@ -110,4 +120,203 @@ class HttpClientResponseStreamingSpec extends BaseHttpClientSpec {
     (1..10).collect { get().body.bytes == payload }.every()
   }
 
+  def "can safely stream empty body"() {
+    when:
+    otherApp {
+      get {
+        response.status(204).send()
+      }
+    }
+    handlers { HttpClient httpClient ->
+      get {
+        httpClient.requestStream(otherAppUrl(), {}).then {
+          it.forwardTo(context.response)
+        }
+      }
+    }
+    def http = HttpClient.of { it.poolSize(30) }
+
+    then:
+    def p = (1..100).collect { http.get(applicationUnderTest.address) }
+    def b = ParallelBatch.of(p)
+
+    ExecHarness.runSingle {
+      b.forEach { i, v -> }.then()
+    }
+  }
+
+  def "connection is closed if response is not read"() {
+    when:
+    Channel channel
+    otherApp {
+      get {
+        channel = directChannelAccess.channel
+        render "foo"
+      }
+    }
+
+    handlers { HttpClient httpClient ->
+      get {
+        httpClient.requestStream(otherAppUrl(), {}).then {
+          render "ok"
+        }
+      }
+    }
+
+    then:
+    text == "ok"
+    channel.closeFuture().sync()
+  }
+
+  def "keep alive connection is closed if response is not read"() {
+    when:
+    Channel channel
+    otherApp {
+      get {
+        channel = directChannelAccess.channel
+        render "foo" * 8192 * 100 // must be bigger than one buffer, otherwise may be read implicitly.
+      }
+    }
+
+    bindings {
+      bindInstance(HttpClient, HttpClient.of { it.poolSize(8) })
+    }
+
+    handlers { HttpClient httpClient ->
+      get {
+        httpClient.requestStream(otherAppUrl(), {}).then {
+          render "ok"
+        }
+      }
+    }
+
+    then:
+    text == "ok"
+    channel.closeFuture().sync()
+  }
+
+  def "keep alive connection is not closed if response is not read but had no body"() {
+    when:
+    Channel channel
+    otherApp {
+      get {
+        channel = directChannelAccess.channel
+        response.send()
+      }
+    }
+
+    bindings {
+      bindInstance(HttpClient, HttpClient.of { it.poolSize(8) })
+    }
+
+    handlers { HttpClient httpClient ->
+      get {
+        httpClient.requestStream(otherAppUrl(), {}).then {
+          render "ok"
+        }
+      }
+    }
+
+    then:
+    text == "ok"
+
+    when:
+    channel.closeFuture().get(2, TimeUnit.SECONDS)
+
+    then:
+    thrown TimeoutException
+  }
+
+  def "keep alive connection is not closed if response is not read but has no body"() {
+    when:
+    Channel channel
+    otherApp {
+      get {
+        if (channel == null) {
+          channel = directChannelAccess.channel
+        } else {
+          assert channel == directChannelAccess.channel
+        }
+        response.send()
+      }
+    }
+
+    bindings {
+      bindInstance(HttpClient, HttpClient.of { it.poolSize(8) })
+    }
+
+    handlers { HttpClient httpClient ->
+      get {
+        httpClient.requestStream(otherAppUrl(), {}).then {
+          render "ok"
+        }
+      }
+    }
+
+    then:
+    text == "ok"
+    text == "ok"
+  }
+
+  def "read timeout is propagated when reading response stream"() {
+    when:
+    otherApp {
+      get {
+        render ResponseChunks.stringChunks(Streams.periodically(context, Duration.ofSeconds(5), { "a" }))
+      }
+    }
+    handlers {
+      get {
+        get(HttpClient).requestStream(otherApp.address) {
+          it.readTimeout(Duration.ofSeconds(2))
+        }.then {
+          ByteBufStreams.compose(it.body)
+            .onError(HttpClientReadTimeoutException) { render "timeout" }
+            .then { response.send it }
+        }
+      }
+    }
+
+    then:
+    text == "timeout"
+  }
+
+  def "can influence chunk size"() {
+    when:
+    def s = "a" * 102400
+    int max = 0
+    otherApp {
+      get {
+        render s
+      }
+    }
+    handlers {
+      def http = HttpClient.of {
+        if (c) {
+          it.responseMaxChunkSize(c)
+        }
+      }
+
+      get {
+        http.requestStream(otherAppUrl(), { if (r) { it.responseMaxChunkSize(r) } }).then {
+          render ResponseChunks.bufferChunks("text/plain", it.getBody().wiretap {
+            if (it.data) {
+              max = Math.max(max, it.item.readableBytes())
+            }
+          })
+        }
+      }
+    }
+
+    then:
+    text == s
+    max == size
+
+    where:
+    c    | r     | size
+    0    | 0     | 8192
+    1024 | 0     | 1024
+    1024 | 2048  | 2048
+    0    | 10240 | 10240
+  }
 }

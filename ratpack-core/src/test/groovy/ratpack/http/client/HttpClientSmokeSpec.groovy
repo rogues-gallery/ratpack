@@ -24,7 +24,6 @@ import io.netty.util.CharsetUtil
 import ratpack.exec.Blocking
 import ratpack.stream.Streams
 import spock.lang.IgnoreIf
-import spock.lang.Unroll
 
 import java.time.Duration
 import java.util.zip.GZIPInputStream
@@ -34,7 +33,6 @@ import static ratpack.http.internal.HttpHeaderConstants.CONTENT_ENCODING
 import static ratpack.sse.ServerSentEvents.serverSentEvents
 import static ratpack.stream.Streams.publish
 
-@Unroll
 class HttpClientSmokeSpec extends BaseHttpClientSpec {
 
   def "can make simple get request"() {
@@ -348,17 +346,41 @@ class HttpClientSmokeSpec extends BaseHttpClientSpec {
   }
 
   @IgnoreIf({ InetAddress.localHost.isLoopbackAddress() })
-  def "can set connect timeout"() {
+  def "can set default connect timeout"() {
     setup:
     bindings {
-      bindInstance(HttpClient, HttpClient.of { it.poolSize(pooled ? 8 : 0) })
+      bindInstance(HttpClient, HttpClient.of { it.poolSize(pooled ? 8 : 0) ; it.connectTimeout(Duration.ofMillis(20)) })
     }
-    def nonRoutableIp = '192.168.0.0'
 
     when:
     handlers {
       get { HttpClient httpClient ->
-        httpClient.get("http://$nonRoutableIp".toURI()) {
+        httpClient.get("http://netty.io:65535".toURI()) onError {
+          render it.toString()
+        } then {
+          render "success!"
+        }
+      }
+    }
+
+    then:
+    text == "io.netty.channel.ConnectTimeoutException: Connect timeout (PT0.02S) connecting to http://netty.io:65535"
+
+    where:
+    pooled << [true, false]
+  }
+
+  @IgnoreIf({ InetAddress.localHost.isLoopbackAddress() })
+  def "can override connect timeout on request"() {
+    setup:
+    bindings {
+      bindInstance(HttpClient, HttpClient.of { it.poolSize(pooled ? 8 : 0) })
+    }
+
+    when:
+    handlers {
+      get { HttpClient httpClient ->
+        httpClient.get("http://netty.io:65535".toURI()) {
           it.connectTimeout(Duration.ofMillis(20))
         } onError {
           render it.toString()
@@ -369,7 +391,7 @@ class HttpClientSmokeSpec extends BaseHttpClientSpec {
     }
 
     then:
-    text == "io.netty.channel.ConnectTimeoutException: Connect timeout (PT0.02S) connecting to http://192.168.0.0"
+    text == "io.netty.channel.ConnectTimeoutException: Connect timeout (PT0.02S) connecting to http://netty.io:65535"
 
     where:
     pooled << [true, false]
@@ -696,7 +718,6 @@ BAR
     pooled << [true, false]
   }
 
-  @Unroll
   def "can configure request method #method via request spec"() {
     given:
     handlers {
@@ -803,11 +824,11 @@ BAR
 
     then:
     response.status.code == 200
-    response.headers.get("ALLOW") == ["GET", "PUT", "POST", "DELETE", "PATCH"].join(",")
+    response.headers.get("ALLOW") == "DELETE,GET,PATCH,POST,PUT"
 
     and:
     pathResponse.status.code == 200
-    pathResponse.headers.get("ALLOW") == ["GET"].join(",")
+    pathResponse.headers.get("ALLOW") == "GET"
   }
 
   def "can configure request method HEAD via request spec"() {

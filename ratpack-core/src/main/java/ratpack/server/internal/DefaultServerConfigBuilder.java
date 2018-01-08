@@ -25,10 +25,12 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.io.ByteSource;
 import com.google.common.reflect.TypeToken;
+import io.netty.handler.ssl.SslContext;
 import ratpack.config.*;
 import ratpack.config.internal.DefaultConfigData;
 import ratpack.config.internal.DefaultConfigDataBuilder;
-import ratpack.config.internal.module.SSLContextDeserializer;
+import ratpack.config.internal.module.JdkSslContextDeserializer;
+import ratpack.config.internal.module.NettySslContextDeserializer;
 import ratpack.config.internal.module.ServerConfigDataDeserializer;
 import ratpack.file.FileSystemBinding;
 import ratpack.func.Action;
@@ -44,6 +46,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -125,6 +128,11 @@ public class DefaultServerConfigBuilder implements ServerConfigBuilder {
   }
 
   @Override
+  public ServerConfigBuilder registerShutdownHook(boolean registerShutdownHook) {
+    return addToServer(n -> n.put("registerShutdownHook", registerShutdownHook));
+  }
+
+  @Override
   public ServerConfigBuilder publicAddress(URI publicAddress) {
     return addToServer(n -> n.putPOJO("publicAddress", publicAddress));
   }
@@ -155,6 +163,11 @@ public class DefaultServerConfigBuilder implements ServerConfigBuilder {
   }
 
   @Override
+  public ServerConfigBuilder idleTimeout(Duration readTimeout) {
+    return addToServer(n -> n.putPOJO("idleTimeout", readTimeout));
+  }
+
+  @Override
   public ServerConfigBuilder maxMessagesPerRead(int maxMessagesPerRead) {
     return addToServer(n -> n.put("maxMessagesPerRead", maxMessagesPerRead));
   }
@@ -165,18 +178,30 @@ public class DefaultServerConfigBuilder implements ServerConfigBuilder {
   }
 
   @Override
+  public ServerConfigBuilder connectQueueSize(int connectQueueSize) {
+    return addToServer(n -> n.put("connectQueueSize", connectQueueSize));
+  }
+
+  @Override
   public ServerConfigBuilder writeSpinCount(int writeSpinCount) {
     return addToServer(n -> n.put("writeSpinCount", writeSpinCount));
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public ServerConfigBuilder ssl(SSLContext sslContext) {
-    return addToServer(n -> n.putPOJO("ssl", sslContext));
+    return addToServer(n -> n.putPOJO("jdkSsl", sslContext));
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public ServerConfigBuilder requireClientSslAuth(boolean requireClientSslAuth) {
     return addToServer(n -> n.put("requireClientSslAuth", requireClientSslAuth));
+  }
+
+  @Override
+  public ServerConfigBuilder ssl(SslContext sslContext) {
+    return addToServer(n -> n.putPOJO("ssl", sslContext));
   }
 
   @Override
@@ -404,12 +429,14 @@ public class DefaultServerConfigBuilder implements ServerConfigBuilder {
     public ConfigModule(ServerEnvironment serverEnvironment, Supplier<FileSystemBinding> baseDirSupplier) {
       super("ratpack");
       addDeserializer(ServerConfigData.class, new ServerConfigDataDeserializer(
+        serverEnvironment.getAddress(),
         serverEnvironment.getPort(),
         serverEnvironment.isDevelopment(),
         serverEnvironment.getPublicAddress(),
         baseDirSupplier
       ));
-      addDeserializer(SSLContext.class, new SSLContextDeserializer());
+      addDeserializer(SSLContext.class, new JdkSslContextDeserializer());
+      addDeserializer(SslContext.class, new NettySslContextDeserializer());
     }
   }
 

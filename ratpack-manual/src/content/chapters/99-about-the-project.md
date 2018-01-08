@@ -9,7 +9,7 @@ Ratpack has been made possible by the following people.
 The following people are currently actively contributing their time to Ratpack.
 
 * [David Carr](https://github.com/davidmc24)
-* [Luke Daley](https://github.com/alkemist)
+* [Luke Daley](https://github.com/ldaley)
 * [Marcin Erdmann](https://github.com/erdi)
 * [Rob Fletcher](https://github.com/robfletcher)
 * [Rus Hart](https://github.com/rhart)
@@ -29,7 +29,7 @@ The following people have provided significant contributions.
 * [Tomás Lin](https://github.com/tomaslin)
 * [Kevin Marquardsen](https://github.com/kmarquardsen)
 * [Stefano Gualdi](https://github.com/stefanogualdi)
-* [Ben Navetta](https://github.com/roguePanda)
+* Ben Navetta
 * [Bobby Warner](https://github.com/bobbywarner)
 * [Jim White](https://github.com/jimwhite)
 * [Dimitris Zavaliadis](https://github.com/dimzava)
@@ -80,10 +80,15 @@ The following people have provided significant contributions.
 * [Gus Power](https://github.com/guspower)
 * [Rahul Somasunderam](https://github.com/rahulsom)
 * [Spencer Allain](https://github.com/merscwog)
-* [Phill Barber] (https://github.com/phillbarber)
-* [Sebastien Bonnet] (https://github.com/sebbonnet)
+* [Phill Barber](https://github.com/phillbarber)
+* [Sebastien Bonnet](https://github.com/sebbonnet)
 * [Alex Edwards](https://github.com/set321go)
 * [Ho Yan Leung](https://github.com/hyleung)
+* [Felipe Fernández](https://github.com/felipefzdz)
+* [Nick Pocock](https://github.com/pocockn)
+* [Timur Salyakhutdinov](https://github.com/timic)
+* [Matthew Kavanagh](https://github.com/mkavanagh)
+* [Jason Terhune-Wold](https://github.com/jterhune)
 
 ### Past project members
 

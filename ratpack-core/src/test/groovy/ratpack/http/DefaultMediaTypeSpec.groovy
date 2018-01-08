@@ -18,7 +18,6 @@ package ratpack.http
 
 import ratpack.http.internal.DefaultMediaType
 import spock.lang.Specification
-import spock.lang.Unroll
 
 import java.nio.charset.Charset
 
@@ -42,16 +41,16 @@ class DefaultMediaTypeSpec extends Specification {
 
   def "illegal content type is treated as just a type"() {
     when:
-    def c = ct(" application/json;charset ;foo=bar ")
+    def c = ct(" application json;charset ;foo=bar ")
 
     then:
-    c.type == "application/json;charset ;foo=bar"
+    c.type == "application json;charset ;foo=bar"
 
     when:
-    c = ct(" application/json;charset=foo ; bar=baz ")
+    c = ct(" application json;charset=foo ; bar=baz ")
 
     then:
-    c.type == "application/json;charset=foo ; bar=baz"
+    c.type == "application json;charset=foo ; bar=baz"
   }
 
   def "to string"() {
@@ -62,7 +61,6 @@ class DefaultMediaTypeSpec extends Specification {
     cts("application/json;a=1; b=2") == "application/json; a=1; b=2"
   }
 
-  @Unroll
   def "charset #charset parses without errors"() {
     when:
     MediaType mt = ct("application/json;charset=${charset}")
@@ -72,10 +70,10 @@ class DefaultMediaTypeSpec extends Specification {
     Charset.checkName(mt.getCharset())
 
     where:
-    charset       | expectedCharset
-    "utf-8"       | "UTF-8"
-    "UTF-8"       | "UTF-8"
-    "\"utf-8\""   | "UTF-8"
+    charset     | expectedCharset
+    "utf-8"     | "UTF-8"
+    "UTF-8"     | "UTF-8"
+    "\"utf-8\"" | "UTF-8"
   }
 
   private MediaType ct(s) {

@@ -24,6 +24,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ratpack.exec.Operation;
 import ratpack.exec.Promise;
 import ratpack.http.Response;
@@ -34,6 +36,8 @@ import java.io.*;
 import java.util.*;
 
 public class DefaultSession implements Session {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(Session.class);
 
   private Map<SessionKey<?>, byte[]> entries;
 
@@ -57,13 +61,13 @@ public class DefaultSession implements Session {
 
     private static final long serialVersionUID = 2;
 
-    public static final Ordering<SessionKey<?>> KEY_NAME_ORDERING = Ordering.natural()
+    private static final Ordering<SessionKey<?>> KEY_NAME_ORDERING = Ordering.natural()
       .nullsFirst()
-      .<SessionKey<?>>onResultOf(SessionKey::getName);
+      .onResultOf(SessionKey::getName);
 
-    public static final Ordering<SessionKey<?>> KEY_TYPE_ORDERING = Ordering.natural()
+    private static final Ordering<SessionKey<?>> KEY_TYPE_ORDERING = Ordering.natural()
       .nullsFirst()
-      .<SessionKey<?>>onResultOf(k -> k.getType() == null ? null : k.getType().getName());
+      .onResultOf(k -> k.getType() == null ? null : k.getType().getName());
 
     private static final Comparator<SessionKey<?>> COMPARATOR = KEY_NAME_ORDERING.compound(KEY_TYPE_ORDERING);
 
@@ -168,8 +172,18 @@ public class DefaultSession implements Session {
 
   private void hydrate(ByteBuf bytes) throws Exception {
     if (bytes.readableBytes() > 0) {
-      SerializedForm deserialized = defaultSerializer.deserialize(SerializedForm.class, new ByteBufInputStream(bytes));
-      entries = deserialized.entries;
+      try {
+        SerializedForm deserialized = defaultSerializer.deserialize(SerializedForm.class, new ByteBufInputStream(bytes));
+        if (deserialized == null) {
+          this.entries = new HashMap<>();
+        } else {
+          entries = deserialized.entries;
+        }
+      } catch (Exception e) {
+        LOGGER.warn("Exception thrown deserializing session " + getId() + " with serializer " + defaultSerializer + " (session will be discarded)", e);
+        this.entries = new HashMap<>();
+        markDirty();
+      }
     } else {
       this.entries = new HashMap<>();
     }
@@ -258,8 +272,14 @@ public class DefaultSession implements Session {
       if (bytes == null) {
         return Optional.empty();
       } else {
-        T deserialized = serializer.deserialize(key.getType(), new ByteArrayInputStream(bytes));
-        return Optional.of(deserialized);
+        try {
+          T value = serializer.deserialize(key.getType(), new ByteArrayInputStream(bytes));
+          return Optional.ofNullable(value);
+        } catch (Exception e) {
+          LOGGER.warn("Exception thrown deserializing entry " + key + " with serializer " + serializer + " (value will be discarded from session)", e);
+          remove(key);
+          return Optional.empty();
+        }
       }
     }
 

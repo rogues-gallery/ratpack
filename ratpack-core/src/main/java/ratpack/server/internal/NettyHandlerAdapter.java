@@ -21,8 +21,12 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.AttributeKey;
 import io.netty.util.CharsetUtil;
+import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ratpack.exec.ExecController;
@@ -41,6 +45,9 @@ import ratpack.registry.Registry;
 import ratpack.render.internal.DefaultRenderController;
 import ratpack.server.ServerConfig;
 
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.security.cert.X509Certificate;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.CharBuffer;
@@ -51,8 +58,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @ChannelHandler.Sharable
 public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
 
-  private static final AttributeKey<Action<Object>> CHANNEL_SUBSCRIBER_ATTRIBUTE_KEY = AttributeKey.valueOf("ratpack.subscriber");
-  private static final AttributeKey<RequestBodyAccumulator> BODY_ACCUMULATOR_KEY = AttributeKey.valueOf(RequestBodyAccumulator.class.getName());
+  private static final AttributeKey<Action<Object>> CHANNEL_SUBSCRIBER_ATTRIBUTE_KEY = AttributeKey.valueOf(NettyHandlerAdapter.class, "subscriber");
+  private static final AttributeKey<RequestBodyAccumulator> BODY_ACCUMULATOR_KEY = AttributeKey.valueOf(NettyHandlerAdapter.class, "requestBody");
+  private static final AttributeKey<X509Certificate> CLIENT_CERT_KEY = AttributeKey.valueOf(NettyHandlerAdapter.class, "principal");
 
   private final static Logger LOGGER = LoggerFactory.getLogger(NettyHandlerAdapter.class);
 
@@ -88,20 +96,23 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
       } else {
         bodyAccumulator.add((HttpContent) msg);
       }
+
+      // Read for the next request proactively so that we
+      // detect if the client closes the connection.
       if (msg instanceof LastHttpContent) {
-        ctx.read();
+        ctx.channel().read();
       }
     } else {
       Action<Object> subscriber = ctx.channel().attr(CHANNEL_SUBSCRIBER_ATTRIBUTE_KEY).get();
       if (subscriber == null) {
-        super.channelRead(ctx, msg);
+        super.channelRead(ctx, ReferenceCountUtil.touch(msg));
       } else {
-        subscriber.execute(msg);
+        subscriber.execute(ReferenceCountUtil.touch(msg));
       }
     }
   }
 
-  private void newRequest(final ChannelHandlerContext ctx, final HttpRequest nettyRequest) throws Exception {
+  private void newRequest(ChannelHandlerContext ctx, HttpRequest nettyRequest) throws Exception {
     if (!nettyRequest.decoderResult().isSuccess()) {
       sendError(ctx, HttpResponseStatus.BAD_REQUEST);
       return;
@@ -118,7 +129,7 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
 
     RequestBody requestBody = hasBody ? new RequestBody(contentLength, nettyRequest, ctx) : null;
 
-    final Channel channel = ctx.channel();
+    Channel channel = ctx.channel();
 
     if (requestBody != null) {
       channel.attr(BODY_ACCUMULATOR_KEY).set(requestBody);
@@ -126,7 +137,9 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
     InetSocketAddress remoteAddress = (InetSocketAddress) channel.remoteAddress();
     InetSocketAddress socketAddress = (InetSocketAddress) channel.localAddress();
 
-    final DefaultRequest request = new DefaultRequest(
+    ConnectionIdleTimeout connectionIdleTimeout = ConnectionIdleTimeout.of(channel);
+
+    DefaultRequest request = new DefaultRequest(
       Instant.now(),
       requestHeaders,
       nettyRequest.method(),
@@ -135,13 +148,16 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
       remoteAddress,
       socketAddress,
       serverRegistry.get(ServerConfig.class),
-      requestBody
+      requestBody,
+      connectionIdleTimeout,
+      channel.attr(CLIENT_CERT_KEY).get()
     );
-    final HttpHeaders nettyHeaders = new DefaultHttpHeaders(false);
-    final MutableHeaders responseHeaders = new NettyHeadersBackedMutableHeaders(nettyHeaders);
-    final AtomicBoolean transmitted = new AtomicBoolean(false);
 
-    final DefaultResponseTransmitter responseTransmitter = new DefaultResponseTransmitter(transmitted, channel, nettyRequest, request, nettyHeaders, requestBody);
+    HttpHeaders nettyHeaders = new DefaultHttpHeaders(false);
+    MutableHeaders responseHeaders = new NettyHeadersBackedMutableHeaders(nettyHeaders);
+    AtomicBoolean transmitted = new AtomicBoolean(false);
+
+    DefaultResponseTransmitter responseTransmitter = new DefaultResponseTransmitter(transmitted, channel, nettyRequest, request, nettyHeaders, requestBody);
 
     ctx.channel().attr(DefaultResponseTransmitter.ATTRIBUTE_KEY).set(responseTransmitter);
 
@@ -150,7 +166,7 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
       ctx.channel().attr(CHANNEL_SUBSCRIBER_ATTRIBUTE_KEY).set(thing);
     };
 
-    final DefaultContext.RequestConstants requestConstants = new DefaultContext.RequestConstants(
+    DefaultContext.RequestConstants requestConstants = new DefaultContext.RequestConstants(
       applicationConstants,
       request,
       channel,
@@ -158,15 +174,10 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
       subscribeHandler
     );
 
-    final Response response = new DefaultResponse(responseHeaders, ctx.alloc(), responseTransmitter);
+    Response response = new DefaultResponse(responseHeaders, ctx.alloc(), responseTransmitter);
     requestConstants.response = response;
 
     DefaultContext.start(channel.eventLoop(), requestConstants, serverRegistry, handlers, execution -> {
-      if (requestBody != null) {
-        requestBody.close();
-        channel.attr(BODY_ACCUMULATOR_KEY).set(null);
-      }
-
       if (!transmitted.get()) {
         Handler lastHandler = requestConstants.handler;
         StringBuilder description = new StringBuilder();
@@ -218,11 +229,35 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
   }
 
   @Override
-  public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
-    ctx.channel().attr(DefaultResponseTransmitter.ATTRIBUTE_KEY).get().writabilityChanged();
+  public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+    if (evt instanceof IdleStateEvent) {
+      ConnectionClosureReason.setIdle(ctx.channel());
+      ctx.close();
+    }
+    if (evt instanceof SslHandshakeCompletionEvent && ((SslHandshakeCompletionEvent) evt).isSuccess()) {
+      SSLEngine engine = ctx.pipeline().get(SslHandler.class).engine();
+      if (engine.getWantClientAuth() || engine.getNeedClientAuth()) {
+        try {
+          X509Certificate clientCert = engine.getSession().getPeerCertificateChain()[0];
+          ctx.channel().attr(CLIENT_CERT_KEY).set(clientCert);
+        } catch (SSLPeerUnverifiedException ignore) {
+          // ignore - there is no way to avoid this exception that I can determine
+        }
+      }
+    }
+
+    super.userEventTriggered(ctx, evt);
   }
 
-  private boolean isIgnorableException(Throwable throwable) {
+  @Override
+  public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+    DefaultResponseTransmitter responseTransmitter = ctx.channel().attr(DefaultResponseTransmitter.ATTRIBUTE_KEY).get();
+    if (responseTransmitter != null) {
+      responseTransmitter.writabilityChanged();
+    }
+  }
+
+  private static boolean isIgnorableException(Throwable throwable) {
     if (throwable instanceof ClosedChannelException) {
       return true;
     } else if (throwable instanceof IOException) {
@@ -234,7 +269,7 @@ public class NettyHandlerAdapter extends ChannelInboundHandlerAdapter {
     }
   }
 
-  public static void sendError(ChannelHandlerContext ctx, HttpResponseStatus status) {
+  private static void sendError(ChannelHandlerContext ctx, HttpResponseStatus status) {
     FullHttpResponse response = new DefaultFullHttpResponse(
       HttpVersion.HTTP_1_1, status, Unpooled.copiedBuffer("Failure: " + status.toString() + "\r\n", CharsetUtil.UTF_8));
     response.headers().set(HttpHeaderConstants.CONTENT_TYPE, HttpHeaderConstants.PLAIN_TEXT_UTF8);

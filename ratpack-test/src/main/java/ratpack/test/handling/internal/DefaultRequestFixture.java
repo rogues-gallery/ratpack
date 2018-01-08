@@ -58,7 +58,9 @@ import ratpack.util.Exceptions;
 
 import java.net.InetSocketAddress;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 
 import static io.netty.buffer.Unpooled.buffer;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
@@ -123,32 +125,52 @@ public class DefaultRequestFixture implements RequestFixture {
 
     DefaultRequest request = new DefaultRequest(
       Instant.now(), requestHeaders, HttpMethod.valueOf(method.toUpperCase()), HttpVersion.valueOf(protocol), uri,
-      new InetSocketAddress(remoteHostAndPort.getHostText(), remoteHostAndPort.getPort()),
-      new InetSocketAddress(localHostAndPort.getHostText(), localHostAndPort.getPort()),
+      new InetSocketAddress(remoteHostAndPort.getHost(), remoteHostAndPort.getPort()),
+      new InetSocketAddress(localHostAndPort.getHost(), localHostAndPort.getPort()),
       serverConfig,
       new RequestBodyReader() {
+
+        private boolean unread = true;
+        private long maxContentLength = 8096;
+
+        public boolean isUnread() {
+          return unread;
+        }
+
         @Override
         public long getContentLength() {
           return requestBody.readableBytes();
         }
 
         @Override
-        public Promise<? extends ByteBuf> read(long maxContentLength, Block onTooLarge) {
-          return Promise.value(requestBody)
+        public long getMaxContentLength() {
+          return maxContentLength;
+        }
+
+        @Override
+        public void setMaxContentLength(long maxContentLength) {
+          this.maxContentLength = maxContentLength;
+        }
+
+        @Override
+        public Promise<? extends ByteBuf> read(Block onTooLarge) {
+          return Promise.sync(() -> {
+            unread = false;
+            return requestBody;
+          })
             .route(r -> r.readableBytes() > maxContentLength, onTooLarge.action());
         }
 
         @Override
-        public TransformablePublisher<? extends ByteBuf> readStream(long maxContentLength) {
-          return Streams.<ByteBuf>yield(r -> {
-            if (r.getRequestNum() > 0) {
-              return null;
-            } else {
-              return requestBody;
-            }
-          });
+        public TransformablePublisher<? extends ByteBuf> readStream() {
+          return Streams.publish(Collections.singleton(requestBody)).wiretap(e ->
+            unread = false
+          );
         }
-      }
+      },
+      idleTimeout -> {
+      },
+      null
     );
 
     if (pathBinding != null) {
@@ -206,7 +228,12 @@ public class DefaultRequestFixture implements RequestFixture {
 
   @Override
   public RequestFixture pathBinding(String boundTo, String pastBinding, Map<String, String> pathTokens) {
-    pathBinding = new DefaultPathBinding(pastBinding, ImmutableMap.copyOf(pathTokens), new RootPathBinding(pastBinding), "");
+    return pathBinding(boundTo, pastBinding, pathTokens, "");
+  }
+
+  @Override
+  public RequestFixture pathBinding(String boundTo, String pastBinding, Map<String, String> pathTokens, String description) {
+    pathBinding = new DefaultPathBinding(boundTo, ImmutableMap.copyOf(pathTokens), new RootPathBinding(boundTo + "/" + pastBinding), description);
     return this;
   }
 
@@ -321,6 +348,11 @@ public class DefaultRequestFixture implements RequestFixture {
 
     @Override
     public RatpackServer reload() throws Exception {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Optional<Registry> getRegistry() {
       throw new UnsupportedOperationException();
     }
   }

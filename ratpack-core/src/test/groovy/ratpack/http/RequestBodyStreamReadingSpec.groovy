@@ -17,18 +17,22 @@
 package ratpack.http
 
 import io.netty.buffer.ByteBuf
-import io.netty.buffer.ByteBufUtil
+import io.netty.buffer.PooledByteBufAllocator
 import io.netty.buffer.Unpooled
 import org.apache.commons.lang3.RandomStringUtils
+import org.reactivestreams.Publisher
 import org.reactivestreams.Subscriber
 import org.reactivestreams.Subscription
 import ratpack.exec.Blocking
-import ratpack.handling.Context
+import ratpack.exec.Promise
 import ratpack.http.client.RequestSpec
 import ratpack.registry.Registry
 import ratpack.stream.Streams
+import ratpack.stream.bytebuf.ByteBufStreams
 import ratpack.test.internal.RatpackGroovyDslSpec
+import spock.util.concurrent.BlockingVariable
 
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
 class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
@@ -43,15 +47,16 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
         render "ok"
       }
       post("read") {
-        render ResponseChunks.bufferChunks("text/plain", request.bodyStream)
+        render(composeString(request.bodyStream))
       }
     }
 
     then:
     requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "foo" }) }
     postText("ignore") == "ok"
-    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "bar" }) }
-    postText("read") == "bar"
+    def bar = "bar" * (1024 * 8)
+    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << bar }) }
+    postText("read") == bar
   }
 
   def "can read body after redirect"() {
@@ -61,10 +66,10 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
     }
     handlers {
       post("redirect") {
-        redirect "read"
+        redirect 303, "read"
       }
       post("read") {
-        render ResponseChunks.bufferChunks("text/plain", request.bodyStream)
+        render(composeString(request.bodyStream))
       }
     }
 
@@ -80,7 +85,7 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
     }
     handlers {
       post {
-        render ResponseChunks.bufferChunks("text/plain", request.bodyStream)
+        render(composeString(request.bodyStream))
       }
     }
 
@@ -93,8 +98,8 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
     when:
     handlers {
       post {
-        Blocking.get { "foo " }.map { request.bodyStream }.then { body ->
-          render ResponseChunks.bufferChunks("text/plain", body)
+        Blocking.get { "foo " }.map { composeString(request.bodyStream) }.then { body ->
+          render body
         }
       }
     }
@@ -158,16 +163,14 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
     }
     handlers {
       post { ctx ->
-        request.bodyStream.subscribe(new BufferThenSendSubscriber(context))
+        render composeString(request.bodyStream)
       }
     }
 
     then:
-    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "bar".multiply(16) }) }
+    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "bar" * 100000 }) }
     def response = post()
     response.statusCode == 413
-    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "foo" }) }
-    postText() == "foo"
   }
 
   def "override acceptable max content length per request"() {
@@ -177,20 +180,19 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
     }
     handlers {
       post {
-        request.bodyStream.subscribe(new BufferThenSendSubscriber(context))
+        render composeString(request.bodyStream)
       }
       post("allow") {
-        request.getBodyStream(16 * 8).subscribe(new BufferThenSendSubscriber(context))
+        render composeString(request.getBodyStream(16 * 8))
       }
     }
 
     then:
-//    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "bar".multiply(16) }) }
-//    def response = post()
-//    response.statusCode == 413
-//    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "foo".multiply(16) }) }
-//    postText("allow") == "foo".multiply(16)
-    true
+    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "bar".multiply(16) }) }
+    def response = post()
+    response.statusCode == 413
+    requestSpec { RequestSpec requestSpec -> requestSpec.body.stream({ it << "foo".multiply(16) }) }
+    postText("allow") == "foo".multiply(16)
   }
 
   def "can read body only once"() {
@@ -208,7 +210,7 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
       }
       post("again") {
         request.body.then { body ->
-          request.bodyStream.subscribe(new BufferThenSendSubscriber(context))
+          composeString(request.bodyStream)
         }
       }
     }
@@ -345,49 +347,38 @@ class RequestBodyStreamReadingSpec extends RatpackGroovyDslSpec {
     file.text == string
   }
 
-  class BufferThenSendSubscriber implements Subscriber<ByteBuf> {
-
-    private final List<ByteBuf> byteBufs = []
-    private final Context context
-    boolean error
-    Subscription subscription
-
-    BufferThenSendSubscriber(Context context) {
-      this.context = context
-    }
-
-    @Override
-    void onSubscribe(Subscription s) {
-      s.request(Long.MAX_VALUE)
-      subscription = s
-    }
-
-    @Override
-    void onNext(ByteBuf byteBuf) {
-      if (error) {
-        byteBuf.release()
-      } else {
-        byteBufs << byteBuf
+  def "request body stream errors when client closes connection unexpectedly"() {
+    when:
+    def error = new BlockingVariable<Throwable>()
+    handlers {
+      all { ctx ->
+        ByteBufStreams.compose(request.bodyStream, PooledByteBufAllocator.DEFAULT)
+          .onError { error.set(it) }
+          .then { response.send(it) }
       }
     }
 
-    @Override
-    void onError(Throwable t) {
-      error = true
-      byteBufs*.release()
-      if (t instanceof RequestBodyTooLargeException) {
-        context.clientError(413)
-      } else {
-        context.error(t)
-      }
+    and:
+    Socket socket = new Socket()
+    socket.connect(new InetSocketAddress(address.host, address.port))
+    new OutputStreamWriter(socket.outputStream, "UTF-8").with {
+      write("POST / HTTP/1.1\r\n")
+      write("Content-Length: 4000\r\n")
+      write("\r\n")
+      close()
     }
+    socket.close()
 
-    @Override
-    void onComplete() {
-      def composite = Unpooled.unmodifiableBuffer(byteBufs as ByteBuf[])
-      def bytes = ByteBufUtil.getBytes(composite)
-      composite.release()
-      context.response.send(bytes)
+    then:
+    error.get() instanceof ConnectionClosedException
+  }
+
+  Promise<String> composeString(Publisher<? extends ByteBuf> publisher) {
+    ByteBufStreams.compose(publisher).map {
+      def s = it.toString(Charset.defaultCharset())
+      it.release()
+      s
     }
   }
+
 }

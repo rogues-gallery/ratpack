@@ -23,11 +23,16 @@ import org.junit.rules.TemporaryFolder
 import ratpack.http.client.RequestSpec
 import ratpack.test.embed.EmbeddedApp
 import ratpack.test.http.TestHttpClient
+import ratpack.test.internal.spock.InheritedTimeout
+import ratpack.test.internal.spock.InheritedUnroll
 import spock.lang.Specification
+import spock.util.concurrent.PollingConditions
 
 import java.nio.charset.Charset
 import java.util.concurrent.atomic.AtomicReference
 
+@InheritedTimeout(30)
+@InheritedUnroll
 abstract class EmbeddedRatpackSpec extends Specification {
 
   private static final AtomicReference<Boolean> LEAKED = new AtomicReference<>(false)
@@ -45,6 +50,9 @@ abstract class EmbeddedRatpackSpec extends Specification {
   boolean failOnLeak = true
 
   abstract EmbeddedApp getApplication()
+
+  @SuppressWarnings("FieldName")
+  public static final PollingConditions wait = new PollingConditions(timeout: 3)
 
   void configureRequest(RequestSpec requestSpecification) {
     // do nothing
@@ -70,8 +78,7 @@ abstract class EmbeddedRatpackSpec extends Specification {
   }
 
   String rawResponse(Charset charset = CharsetUtil.UTF_8) {
-    StringBuilder builder = new StringBuilder()
-    Socket socket = new Socket(application.address.host, application.address.port)
+    Socket socket = socket()
     try {
       new OutputStreamWriter(socket.outputStream, "UTF-8").with {
         write("GET / HTTP/1.1\r\n")
@@ -80,18 +87,16 @@ abstract class EmbeddedRatpackSpec extends Specification {
         flush()
       }
 
-      InputStreamReader inputStreamReader = new InputStreamReader(socket.inputStream, charset)
-      BufferedReader bufferedReader = new BufferedReader(inputStreamReader)
-
-      def chunk
-      while ((chunk = bufferedReader.readLine()) != null) {
-        builder.append(chunk).append("\n")
-      }
-
-      builder.toString()
+      socket.inputStream.getText(charset.name()).normalize()
     } finally {
       socket.close()
     }
+  }
+
+  Socket socket() {
+    Socket socket = new Socket()
+    socket.connect(new InetSocketAddress(application.address.host, application.address.port))
+    socket
   }
 
 }
