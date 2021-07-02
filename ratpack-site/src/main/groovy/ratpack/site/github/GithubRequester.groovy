@@ -21,9 +21,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode
 import groovy.transform.CompileStatic
 import io.reactivex.functions.Consumer
 import ratpack.exec.Promise
-import ratpack.http.client.HttpClient
-import ratpack.http.client.ReceivedResponse
-import ratpack.http.client.RequestSpec
+import ratpack.core.http.client.HttpClient
+import ratpack.core.http.client.ReceivedResponse
+import ratpack.core.http.client.RequestSpec
 import io.reactivex.Observable
 import io.reactivex.ObservableEmitter
 import io.reactivex.ObservableOnSubscribe
@@ -34,11 +34,13 @@ import static ratpack.rx2.RxRatpack.single
 class GithubRequester {
 
   private final ObjectReader objectReader
+  private final String authToken
   private final HttpClient httpClient
 
-  GithubRequester(ObjectReader objectReader, HttpClient httpClient) {
+  GithubRequester(ObjectReader objectReader, String authToken, HttpClient httpClient) {
     this.httpClient = httpClient
     this.objectReader = objectReader
+    this.authToken = authToken
   }
 
   Promise<ArrayNode> request(String url) {
@@ -52,6 +54,9 @@ class GithubRequester {
   private void getPage(HttpClient httpClient, String url, ObservableEmitter<ArrayNode> pagingSubscription) {
     def promise = httpClient.get(new URI(url)) { RequestSpec it ->
       it.headers.set("User-Agent", "http://www.ratpack.io")
+      if (authToken) {
+        it.headers.set("Authorization", "token " + authToken)
+      }
     }
 
     single(promise).subscribe({ ReceivedResponse response ->

@@ -17,17 +17,17 @@
 package ratpack.test.mock
 
 import ratpack.groovy.test.embed.GroovyEmbeddedApp
-import ratpack.http.HttpMethod
-import ratpack.http.HttpUrlBuilder
-import ratpack.http.Request
-import ratpack.http.client.HttpClient
+import ratpack.core.http.HttpMethod
+import ratpack.core.http.HttpUrlBuilder
+import ratpack.core.http.Request
+import ratpack.core.http.client.HttpClient
 import ratpack.test.embed.EmbeddedApp
 import ratpack.test.handling.HandlerFactory
-import spock.lang.Specification
+import ratpack.test.internal.BaseRatpackSpec
 
 import static ratpack.groovy.Groovy.groovyHandler
 
-class MockApiSpec extends Specification {
+class MockApiSpec extends BaseRatpackSpec {
 
   def "can mock a remote api"() {
     given:

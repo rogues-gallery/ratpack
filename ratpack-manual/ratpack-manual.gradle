@@ -14,53 +14,45 @@
  * limitations under the License.
  */
 
-
 import org.gradle.external.javadoc.internal.AbstractJavadocOptionFileOption
 import org.gradle.external.javadoc.internal.JavadocOptionFileWriterContext
+import io.freefair.gradle.plugins.jsass.SassCompile
+import java.util.regex.Pattern
 
 import static org.pegdown.Extensions.*
 
 buildscript {
   repositories {
-    jcenter()
+    mavenCentral()
     gradlePluginPortal()
+    maven { url 'https://jitpack.io' }
   }
   dependencies {
-    classpath "com.github.robfletcher:compass-gradle-plugin:2.0.6"
     classpath "gradle.plugin.com.github.jengelman.gradle.plugins:gradle-processes:0.5.0"
     classpath "org.pegdown:pegdown:${commonVersions.pegdown}"
-    classpath "com.eriwen:gradle-js-plugin:1.12.1"
+    // Use the master version of gradle-js-plugin since it fixes a Gradle 6 deprecation (from JitPack.io)
+    classpath "com.github.eriwen:gradle-js-plugin:d15f4ae"
     classpath "com.google.javascript:closure-compiler:v20150315"
+    classpath "io.freefair.gradle:jsass-plugin:5.3.0"
   }
 }
 
 description = "The manual for Ratpack (documentation & API reference)"
 
 apply from: "$rootDir/gradle/javaModule.gradle"
-
-apply plugin: "com.github.robfletcher.compass"
+apply from: "$rootDir/gradle/publish-base.gradle"
 apply plugin: "com.eriwen.gradle.js"
+apply plugin: 'io.freefair.jsass-base'
 
-jruby {
-  execVersion = '9.1.14.0'
+repositories {
+  mavenCentral()
 }
 
 dependencies {
-  compass commonDependencies.compass
-
   testCompile apiModules
-  testCompile("org.pac4j:pac4j-oauth:${commonVersions.pac4j}") { // used by ratpack-pac4j's code snippets
-    exclude group: "org.slf4j", module: "slf4j-api"
-    exclude group: "com.google.inject", module: "guice"
-    exclude group: "org.apache.httpcomponents", module: "httpclient"
-    exclude group: "org.apache.commons", module: "commons-lang3"
-    exclude group: "com.fasterxml.jackson.core", module: "jackson-databind"
-  }
   testCompile gradleTestKit()
   testRuntime "org.apache.ant:ant-nodeps:1.8.1"
   testRuntime "com.fasterxml.jackson.datatype:jackson-datatype-jdk8:${commonVersions.jackson}"
-
-  testRuntime project(path: ":ratpack-pac4j", configuration: "testRuntime")
 }
 
 // Gradle needs to use its version of Groovy, exclude ours
@@ -84,21 +76,18 @@ configurations.all {
 
 apply from: "$rootDir/gradle/markdown2book.gradle"
 
-idea {
-  module {
-    excludeDirs += file(".jruby")
-    excludeDirs += file(".sass-cache")
-  }
-}
-
-modifyPom { pom ->
-  project {
-    name "Ratpack Manual"
-  }
-}
-
 apiModules.each { evaluationDependsOn(it.path) }
 evaluationDependsOn ":ratpack-gradle"
+
+task compileSass(type: SassCompile) {
+  doFirst {
+    destinationDir.get().asFile.deleteDir()
+  }
+  source = "src/assets/sass"
+  includePaths.from "$rootDir/shared-web-assets/sass"
+  includePaths.from "$rootDir/shared-web-assets"
+  destinationDir = file("build/assets/css")
+}
 
 task configureApi() {
   doLast {
@@ -111,10 +100,6 @@ task configureApi() {
             packages << ((it.absolutePath - root.absolutePath) - "/").replaceAll("/", ".")
           }
         }
-
-        if (it.name == "ratpack-exec") {
-          packages = packages - ["ratpack.util", "ratpack.util.internal", "ratpack.func"]
-        }
         options.group it.name, packages
       }
     }
@@ -124,25 +109,23 @@ task configureApi() {
 // Note: does not build viewable docs.
 // Docs must be viewed within the manual for styling to work
 task api(type: Javadoc) {
-  dependsOn configureApi, compassCompile
-  group "manual"
-  description "Generates the Javadoc for the entire public API"
-
-  ext.stylesheetFile = file("$buildDir/assets/css/javadoc.css")
-  inputs.file(stylesheetFile)
-  inputs.property("links") { options.links }
-
+  dependsOn configureApi, compileSass
   classpath = files()
-  destinationDir = file("$buildDir/api")
-
+  destinationDir = file("$buildDir/docs")
   apiModules.each {
     source it.sourceSets.main.java
     classpath += it.sourceSets.main.compileClasspath + it.sourceSets.main.output
-
     if (it.hasProperty("apiLinks")) {
       options.links(*it.apiLinks)
     }
   }
+  ext.additionalAssets = """
+      <script src=\"{@docRoot}/../javadoc.all.min.js\"></script>
+      <link rel="stylesheet" type="text/css" href="{@docRoot}/../javadoc.css">
+    """.replaceAll("(^|\\n)\\s*", "")
+
+  inputs.property "additionalAssets", ext.additionalAssets
+  inputs.property "groups", options.groups
 
   configure(options) {
     splitIndex true
@@ -150,38 +133,28 @@ task api(type: Javadoc) {
     links "http://docs.oracle.com/javase/8/docs/api/"
     windowTitle "Ratpack API ($project.version)"
     docTitle "Ratpack API ($project.version)"
-  }
-  options.addStringOption "stylesheetfile", stylesheetFile.absolutePath
+    header = ext.additionalAssets
+    addBooleanOption('-no-module-directories', true)
+    addOption new AbstractJavadocOptionFileOption<String>("-allow-script-in-comments", null) {
+      @Override
+      void write(JavadocOptionFileWriterContext context) throws IOException {
+        context.writeOption(getOption())
+      }
 
-  ext.additionalAssets = """
-      <script src=\"{@docRoot}/../js/all.min.js\"></script>
-      <link rel="stylesheet" type="text/css" href="{@docRoot}/../css/fonts.css">
-    """.replaceAll("(^|\\n)\\s*", "")
-
-  options.addOption new AbstractJavadocOptionFileOption<String>("-allow-script-in-comments", null) {
-    @Override
-    void write(JavadocOptionFileWriterContext context) throws IOException {
-      context.writeOption(getOption())
-    }
-
-    @Override
-    AbstractJavadocOptionFileOption<String> duplicate() {
-      this
+      @Override
+      AbstractJavadocOptionFileOption<String> duplicate() {
+        this
+      }
     }
   }
-  options.bottom = ext.additionalAssets
-
-  inputs.property "additionalAssets", ext.additionalAssets
-  inputs.property "groups", options.groups
-
-  // For some awesome reason, the 'bottom' arg doesn't get applied to these files
   doLast {
-    def replacementString = additionalAssets.replaceAll(java.util.regex.Pattern.quote("{@docRoot}/"), "") + "</html>"
-    ["allclasses-frame.html", "allclasses-noframe.html", "overview-frame.html"].each {
+    def replacementString = additionalAssets.replaceAll(Pattern.quote("{@docRoot}/"), "") + "</html>"
+    ["allclasses.html"].each {
       def f = new File(destinationDir, it)
-      f.text = f.getText('UTF-8').replace("</html>", replacementString)
+      if (f.exists()) {
+        f.text = f.getText('UTF-8').replace("</html>", replacementString)
+      }
     }
-
     fileTree(dir: destinationDir, include: '**/*.html').each { File f ->
       if (f.text.contains("{@literal @}")) {
         f.text = f.getText('UTF-8').replace("{@literal @}", "@")
@@ -191,7 +164,7 @@ task api(type: Javadoc) {
 }
 
 test {
-  dependsOn ":ratpack-gradle:install" // used in gradle snippets
+  dependsOn ":ratpack-gradle:publishAllPublicationsToProjectLocalRepository" // used in gradle snippets
   apiModules.each {
     inputs.files apiModules.sourceSets.main.allSource
     inputs.files project(":ratpack-gradle").sourceSets.main.allSource
@@ -225,7 +198,6 @@ task tokeniseManual(type: Sync) {
     "ratpack-version" : project.version,
     "ratpack-group"   : project.group,
     "groovy-version"  : commonVersions.groovy,
-    "pac4j-version"   : commonVersions.pac4j,
     "retrofit-version": commonVersions.retrofit,
     "slf4j-version"   : commonVersions.slf4j,
     "spock-version"   : commonVersions.spock,
@@ -234,11 +206,8 @@ task tokeniseManual(type: Sync) {
     head              : """
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link href="css/normalize.css" rel="stylesheet" type="text/css">
-        <!--[if lt IE 8]><link href="css/minimal.css" rel="stylesheet" type="text/css"><![endif]-->
-        <!--[if gt IE 7]><!--><link href="css/manual.css" rel="stylesheet" type="text/css"><!--<![endif]-->
-        <link href="css/fonts.css" rel="stylesheet" type="text/css">
-        <script src="js/all.min.js"></script>
+        <link href="manual.css" rel="stylesheet" type="text/css">
+        <script src="manual.all.min.js"></script>
       """,
     footer            : """
         <h2>Ratpack Manual - $version - ${new Date().format("MMMM, yyyy")}</h2>
@@ -281,86 +250,83 @@ task compileManual {
 
   doLast {
     markdown2book.generate(source, destination, options)
+
+    fileTree(ext.destination) {
+      visit {
+        it.file.text = it.file.text.replace("%28", "(").replace("%29", ")")
+      }
+    }
   }
 }
 
-jruby {
-  gemInstallDir = file("${gradle.gradleUserHomeDir}/ruby-gems")
-}
 
-compass {
-  gemDir = file("${gradle.gradleUserHomeDir}/ruby-gems")
-  sassDir = file("src/sass")
-  cssDir = file("$buildDir/assets/css")
-  imagesDir = file("$buildDir/assets/images")
-  importPath = files('../ratpack-site/src/assets/shared-styles')
-  fontsDir = file('../ratpack-site/src/assets/shared-styles/fonts')
-  relativeAssets = true
-  quiet = true
-  debugInfo = false
-  environment = 'production'
-}
-
-task jsDev(type: com.eriwen.gradle.js.tasks.CombineJsTask) {
+task combineManualJs(type: com.eriwen.gradle.js.tasks.CombineJsTask) {
   source = [
     "${projectDir}/src/assets/js/anchorHighlight.js",
     "${projectDir}/src/assets/js/toggleImports.js"
   ]
-  dest = file("${buildDir}/assets/js/all-dev.js")
+  dest = file("${buildDir}/assets/js/manual.js")
 }
 
-minifyJs {
-  source = jsDev
-  dest = file("${buildDir}/assets/js/all-dev.min.js")
+task combineJavadocJs(type: com.eriwen.gradle.js.tasks.CombineJsTask) {
+  source = [
+    "${projectDir}/src/assets/js/toggleImports.js",
+  ]
+  dest = file("${buildDir}/assets/js/javadoc.js")
+}
+
+task minifyManualJs(type: com.eriwen.gradle.js.tasks.MinifyJsTask) {
+  source = combineManualJs
+  dest = file("${buildDir}/assets/js/manual.min.js")
   closure {
     warningLevel = "QUIET"
   }
 }
 
-task jsAll(type: com.eriwen.gradle.js.tasks.CombineJsTask, dependsOn: minifyJs) {
+task minifyJavadocJs(type: com.eriwen.gradle.js.tasks.MinifyJsTask) {
+  source = combineJavadocJs
+  dest = file("${buildDir}/assets/js/javadoc.min.js")
+  closure {
+    warningLevel = "QUIET"
+  }
+}
+
+task allManualJs(type: com.eriwen.gradle.js.tasks.CombineJsTask, dependsOn: minifyManualJs) {
   source = [
     "${projectDir}/src/assets/js/googleAnalytics.js",
-    "${projectDir}/src/assets/js/modernizr.js",
-    "${projectDir}/src/assets/js/prism.js",
+    "${rootDir}/shared-web-assets/js/modernizr.js",
+    "${rootDir}/shared-web-assets/js/prism.js",
     "${projectDir}/src/assets/js/jquery.js",
     "${projectDir}/src/assets/js/contents.js",
     "${projectDir}/src/assets/js/contentsInitializer.js",
-    "${buildDir}/assets/js/all-dev.min.js"
+    "${buildDir}/assets/js/manual.min.js"
   ]
-  dest = file("${buildDir}/assets/js/all.min.js")
+  dest = file("${buildDir}/assets/js/manual.all.min.js")
+}
+
+task allJavadocJs(type: com.eriwen.gradle.js.tasks.CombineJsTask, dependsOn: minifyJavadocJs) {
+  source = [
+    "${rootDir}/shared-web-assets/js/prism.js",
+    "${buildDir}/assets/js/javadoc.min.js"
+  ]
+  dest = file("${buildDir}/assets/js/javadoc.all.min.js")
 }
 
 task stylizeManual(type: Sync) {
   into "$buildDir/stylized-manual"
   from compileManual
-  from(compassCompile) {
-    exclude 'bin/'
-    exclude 'build_info/'
-    exclude 'cache/'
-    exclude 'doc/'
-    exclude 'gems/'
-    exclude 'specifications/'
-  }
-  from jsAll
-}
+  from compileSass
+  from allManualJs
+  from allJavadocJs
 
-file("src/assets").eachDir { File dir ->
-  def task = task("copy${dir.name.capitalize()}", type: Sync) {
-    from dir
-    into "$buildDir/assets/$dir.name"
-  }
-
-  compassCompile.dependsOn task
-
-  stylizeManual {
-    into dir.name, {
-      from task
+  [
+    images: ["src/assets/images", "$rootDir/shared-web-assets/images"],
+    fonts: ["$rootDir/shared-web-assets/fonts"]
+  ].each { destination, source ->
+    into(destination) {
+      from(source)
     }
   }
-}
-
-tasks.withType(com.github.jrubygradle.JRubyExec) {
-  maxHeapSize "128m"
 }
 
 task packageManual(type: Sync) {
@@ -393,13 +359,20 @@ task openApi(dependsOn: packageManual) {
   }
 }
 
-task manualZip(type: Zip) {
-  from packageManual
+def manualZip = tasks.create("manualZip", Zip) {
+  it.from packageManual
 }
 
-configurations {
-  published.extendsFrom zip
+def publications = extensions.getByType(PublishingExtension).publications
+def publication = publications.create("main", MavenPublication) {
+  it.artifact(manualZip)
 }
+
+extensions.findByType(SigningExtension).with {
+  it.sign(publication)
+}
+
+configurations.create("zip")
 
 artifacts {
   zip manualZip

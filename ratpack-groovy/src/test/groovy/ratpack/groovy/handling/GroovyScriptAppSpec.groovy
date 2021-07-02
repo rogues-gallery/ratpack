@@ -17,9 +17,9 @@
 package ratpack.groovy.handling
 
 import ratpack.groovy.Groovy
-import ratpack.impose.ForceServerListenPortImposition
-import ratpack.impose.Impositions
-import ratpack.server.RatpackServer
+import ratpack.core.impose.ForceServerListenPortImposition
+import ratpack.core.impose.Impositions
+import ratpack.core.server.RatpackServer
 import ratpack.test.embed.EmbeddedApp
 import ratpack.test.embed.internal.EmbeddedAppSupport
 import ratpack.test.internal.RatpackGroovyScriptAppSpec
@@ -62,7 +62,7 @@ class GroovyScriptAppSpec extends RatpackGroovyScriptAppSpec {
     text == "foo"
   }
 
-  def "can use Ratpack.groovy script app"() {
+  def "can use script app with capitalized name"() {
     given:
     compileStatic = true
     def app = new EmbeddedAppSupport() {
@@ -87,13 +87,14 @@ class GroovyScriptAppSpec extends RatpackGroovyScriptAppSpec {
     File customRatpackFile = temporaryFolder.newFile('customFile/Ratpack.groovy')
     customRatpackFile.text = ratpackFile.text
     ratpackFile.delete()
-    GroovyScriptAppSpec.classLoader.addURL(customRatpackFile.parentFile.toURI().toURL())
-
+    def loader = new URLClassLoader(customRatpackFile.parentFile.toURI().toURL())
+    Thread.currentThread().setContextClassLoader(loader)
 
     then:
     app.httpClient.text == "foo"
 
     cleanup:
+    Thread.currentThread().setContextClassLoader(this.class.classLoader)
     app.close()
   }
 
@@ -299,7 +300,7 @@ class GroovyScriptAppSpec extends RatpackGroovyScriptAppSpec {
   def "defining a class inside for ratpack.groovy"() {
     when:
     script """
-      import ratpack.server.*
+      import ratpack.core.service.*
       import ratpack.groovy.Groovy.Ratpack
 
       import org.slf4j.*

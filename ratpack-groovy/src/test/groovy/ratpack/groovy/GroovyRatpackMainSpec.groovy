@@ -20,21 +20,21 @@ import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import ratpack.groovy.test.GroovyRatpackMainApplicationUnderTest
 import ratpack.test.MainClassApplicationUnderTest
-import spock.lang.Specification
+import ratpack.test.internal.BaseRatpackSpec
 
-class GroovyRatpackMainSpec extends Specification {
+class GroovyRatpackMainSpec extends BaseRatpackSpec {
 
   @Rule
   TemporaryFolder dir = new TemporaryFolder()
 
   def "starts ratpack app"() {
     given:
-    GroovyRatpackMainSpec.classLoader.addURL(dir.root.toURI().toURL())
+    def loader = new URLClassLoader([dir.root.toURI().toURL()] as URL[])
+    Thread.currentThread().setContextClassLoader(loader)
     File ratpackFile = dir.newFile("ratpack.groovy")
-    this.class.classLoader
     ratpackFile << """
       import static ratpack.groovy.Groovy.*
-      import ratpack.server.Stopper
+      import ratpack.core.server.Stopper
 
       ratpack {
         handlers {
@@ -42,7 +42,7 @@ class GroovyRatpackMainSpec extends Specification {
             render "foo"
           }
           get("stop") {
-            get(ratpack.server.Stopper).stop()
+            get(ratpack.core.server.Stopper).stop()
           }
         }
       }
@@ -57,6 +57,7 @@ class GroovyRatpackMainSpec extends Specification {
     response == "foo"
 
     cleanup:
+    Thread.currentThread().setContextClassLoader(GroovyRatpackMainSpec.classLoader)
     aut?.close()
   }
 }

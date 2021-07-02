@@ -18,14 +18,14 @@ package ratpack.rx2
 
 import io.reactivex.Observable
 import ratpack.exec.Execution
-import ratpack.registry.RegistrySpec
+import ratpack.exec.registry.RegistrySpec
 import ratpack.test.exec.ExecHarness
+import ratpack.test.internal.BaseRatpackSpec
 import spock.lang.AutoCleanup
-import spock.lang.Specification
 
 import java.util.concurrent.CyclicBarrier
 
-class RxParallelSpec extends Specification {
+class RxParallelSpec extends BaseRatpackSpec {
 
   @AutoCleanup
   def harness = ExecHarness.harness(12)

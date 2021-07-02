@@ -20,6 +20,8 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import com.google.inject.*;
+import com.google.inject.binder.LinkedBindingBuilder;
+import com.google.inject.multibindings.Multibinder;
 import com.google.inject.name.Names;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -28,13 +30,15 @@ import ratpack.func.Action;
 import ratpack.guice.BindingsSpec;
 import ratpack.guice.ConfigurableModule;
 import ratpack.guice.RequestScoped;
-import ratpack.http.Request;
-import ratpack.http.Response;
+import ratpack.core.http.Request;
+import ratpack.core.http.Response;
 import ratpack.session.internal.*;
-import ratpack.util.Types;
+import ratpack.func.Types;
 
 import javax.inject.Named;
 import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -53,24 +57,31 @@ import java.util.function.Consumer;
  * <h3>Serialization</h3>
  * <p>
  * Objects must be serialized to be stored in the session.
+ * In order to prevent <a href="https://portswigger.net/web-security/deserialization">insecure deserialization</a>,
+ * types that are to be used in a session must be declared to be safe.
+ * The simplest way to do this is to use {@link #allowTypes} to register the type.
+ * See {@link SessionTypeFilter} for more information.
+ * Trying to store or load a type that has not been allowed will result in a runtime exception.
+ * Note that all types involved in serializing/deserializing a type must be registered, including super types.
+ * <p>
  * The get/set methods {@link SessionData} allow supplying a {@link SessionSerializer} to be used for the specific value.
  * For variants of the get/set methods where a serializer is not provided, the implementation of {@link SessionSerializer} bound with Guice will be used.
  * The default implementation provided by this module uses Java's in built serialization mechanism.
  * Users of this module may choose to override this binding with an alternative serialization strategy.
  * <p>
- * However, other Ratpack extensions may require session storage any rely on Java serialization.
+ * However, other Ratpack extensions may require session storage and rely on Java serialization.
  * For this reason, there is also always a {@link JavaSessionSerializer} implementation available that is guaranteed to be able to serialize any {@link Serializable}
  * object (that conforms to the {@link Serializable} contract.
  * Users of this module may also choose to override this binding with another implementation (e.g. one based on <a href="https://github.com/EsotericSoftware/kryo">Kryo</a>),
  * but this implementation must be able to serialize any object implementing {@link Serializable}.
- *
+ * <p>
  * It is also often desirable to provide alternative implementations for {@link SessionSerializer} and {@link JavaSessionSerializer}.
  * The default binding for both types is an implementation that uses out-of-the-box Java serialization (which is neither fast nor efficient).
  *
  * <h3>Example usage</h3>
  * <pre class="java">{@code
  * import ratpack.guice.Guice;
- * import ratpack.path.PathTokens;
+ * import ratpack.core.path.PathTokens;
  * import ratpack.session.Session;
  * import ratpack.session.SessionModule;
  * import ratpack.test.embed.EmbeddedApp;
@@ -123,7 +134,8 @@ public class SessionModule extends ConfigurableModule<SessionCookieConfig> {
    * @see #memoryStore(Consumer)
    */
   public static final Key<Cache<AsciiString, ByteBuf>> LOCAL_MEMORY_SESSION_CACHE_BINDING_KEY = Key.get(
-    new TypeLiteral<Cache<AsciiString, ByteBuf>>() {},
+    new TypeLiteral<Cache<AsciiString, ByteBuf>>() {
+    },
     Names.named(LOCAL_MEMORY_SESSION_CACHE_BINDING_NAME)
   );
 
@@ -148,6 +160,7 @@ public class SessionModule extends ConfigurableModule<SessionCookieConfig> {
    * @return an action that binds the cache
    * @see #memoryStore(Binder, Consumer)
    */
+  @SuppressWarnings("unused")
   public static Action<Binder> memoryStore(Consumer<? super CacheBuilder<AsciiString, ByteBuf>> config) {
     return b -> memoryStore(b, config);
   }
@@ -155,7 +168,7 @@ public class SessionModule extends ConfigurableModule<SessionCookieConfig> {
   /**
    * A builder for an alternative cache for the default in memory store.
    * <p>
-   * This method can be used from within a custom {@link Module}.
+   * This method can be used from within a custom {@link com.google.inject.Module}.
    * <pre class="java">{@code
    * import com.google.inject.AbstractModule;
    * import ratpack.session.SessionModule;
@@ -182,9 +195,112 @@ public class SessionModule extends ConfigurableModule<SessionCookieConfig> {
     }).in(Scopes.SINGLETON);
   }
 
+  /**
+   * Registers the given types as being session safe.
+   * <p>
+   * This method is only effectual if the implementation of {@link SessionTypeFilter} provided by this module is not overridden.
+   *
+   * <pre class="java">{@code
+   * import com.google.inject.AbstractModule;
+   * import ratpack.session.Session;
+   * import ratpack.session.SessionModule;
+   * import ratpack.guice.Guice;
+   * import ratpack.test.embed.EmbeddedApp;
+   *
+   * import java.io.Serializable;
+   *
+   * import static org.junit.Assert.assertEquals;
+   *
+   * public class Example {
+   *
+   *   static class AllowedType implements Serializable {
+   *   }
+   *
+   *   static class NonAllowedType implements Serializable {
+   *   }
+   *
+   *   static class NonAllowedTypeContainer implements Serializable {
+   *     NonAllowedType nonAllowedType = new NonAllowedType();
+   *   }
+   *
+   *   public static class MySessionTypesModule extends AbstractModule {
+   *     protected void configure() {
+   *       SessionModule.allowTypes(binder(),
+   *         AllowedType.class,
+   *         NonAllowedTypeContainer.class
+   *       );
+   *     }
+   *   }
+   *
+   *   public static void main(String... args) throws Exception {
+   *     EmbeddedApp.of(a -> a
+   *       .registry(Guice.registry(b -> b
+   *         .module(SessionModule.class)
+   *         .module(MySessionTypesModule.class)
+   *       ))
+   *       .handlers(c -> c
+   *         .get("set/allowed", ctx ->
+   *           ctx.get(Session.class)
+   *             .set(new AllowedType())
+   *             .then(() -> ctx.render("ok"))
+   *         )
+   *         .get("set/nonAllowed", ctx ->
+   *           ctx.get(Session.class)
+   *             .set(new NonAllowedType())
+   *             .onError(e -> ctx.render(e.toString()))
+   *             .then(() -> ctx.render("ok"))
+   *         )
+   *         .get("set/nonAllowedContainer", ctx ->
+   *           ctx.get(Session.class)
+   *             .set(new NonAllowedTypeContainer())
+   *             .onError(e -> ctx.render(e.toString()))
+   *             .then(() -> ctx.render("ok"))
+   *         )
+   *       )
+   *     ).test(http -> {
+   *       // Works, only references allowed types
+   *       String response1 = http.getText("set/allowed");
+   *       assertEquals("ok", response1);
+   *
+   *       // Doesn't work, tries to set not allowed type
+   *       String response2 = http.getText("set/nonAllowed");
+   *       assertEquals("ratpack.session.NonAllowedSessionTypeException: Type Example$NonAllowedType is not an allowed session type. Register a SessionTypeFilterPlugin allowing it. See SessionModule.allowTypes().", response2);
+   *
+   *       // Doesn't work, allowed type references not allowed type
+   *       String response3 = http.getText("set/nonAllowedContainer");
+   *       assertEquals("ratpack.session.NonAllowedSessionTypeException: Type Example$NonAllowedType is not an allowed session type. Register a SessionTypeFilterPlugin allowing it. See SessionModule.allowTypes().", response3);
+   *     });
+   *   }
+   * }
+   * }</pre>
+   * <p>
+   * While the above example only shows type checking being applied on writing to the session,
+   * the same checking is applied when reading from the session.
+   *
+   * @param binder the binder
+   * @param types the types to allow to be used in a session
+   * @since 1.9
+   */
+  public static void allowTypes(Binder binder, Class<?>... types) {
+    bindSessionTypeFilterPlugin(binder).toInstance(AllowListSessionTypeFilterPlugin.ofClasses(types));
+  }
+
+  /**
+   * Creates a multi-binding binder for a {@link SessionTypeFilterPlugin}.
+   *
+   * @param binder the binder
+   * @return a binding builder for a {@link SessionTypeFilterPlugin}
+   */
+  public static LinkedBindingBuilder<SessionTypeFilterPlugin> bindSessionTypeFilterPlugin(Binder binder) {
+    return Multibinder.newSetBinder(binder, SessionTypeFilterPlugin.class).addBinding();
+  }
+
   @Override
   protected void configure() {
     memoryStore(binder(), s -> s.maximumSize(1000));
+    Multibinder.newSetBinder(binder(), SessionTypeFilterPlugin.class);
+    bindSessionTypeFilterPlugin(binder()).toInstance(JdkSessionTypeFilterPlugin.INSTANCE);
+    bindSessionTypeFilterPlugin(binder()).toInstance(RatpackSessionTypeFilterPlugin.INSTANCE);
   }
 
   @Provides
@@ -216,9 +332,14 @@ public class SessionModule extends ConfigurableModule<SessionCookieConfig> {
   }
 
   @Provides
+  SessionTypeFilter sessionTypeFilter(Set<SessionTypeFilterPlugin> plugins) {
+    return new CompositeSessionTypeFilter(new HashSet<>(plugins));
+  }
+
+  @Provides
   @RequestScoped
-  Session sessionAdapter(SessionId sessionId, SessionStore store, Response response, ByteBufAllocator bufferAllocator, SessionSerializer defaultSerializer, JavaSessionSerializer javaSerializer) {
-    return new DefaultSession(sessionId, bufferAllocator, store, response, defaultSerializer, javaSerializer);
+  Session sessionAdapter(SessionId sessionId, SessionStore store, Response response, ByteBufAllocator bufferAllocator, SessionSerializer defaultSerializer, JavaSessionSerializer javaSerializer, SessionTypeFilter typeFilter) {
+    return new DefaultSession(sessionId, bufferAllocator, store, response, defaultSerializer, javaSerializer, typeFilter);
   }
 
 }

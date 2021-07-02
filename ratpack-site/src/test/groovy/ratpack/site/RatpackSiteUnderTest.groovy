@@ -17,9 +17,9 @@
 package ratpack.site
 
 import groovy.transform.CompileStatic
-import ratpack.impose.ImpositionsSpec
-import ratpack.impose.UserRegistryImposition
-import ratpack.registry.Registry
+import ratpack.core.impose.ImpositionsSpec
+import ratpack.core.impose.UserRegistryImposition
+import ratpack.exec.registry.Registry
 import ratpack.site.github.GitHubData
 import ratpack.site.github.MockGithubData
 import ratpack.site.github.RatpackVersion

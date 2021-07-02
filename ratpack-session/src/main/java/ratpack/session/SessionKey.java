@@ -16,9 +16,9 @@
 
 package ratpack.session;
 
-import ratpack.api.Nullable;
+import ratpack.func.Nullable;
 import ratpack.session.internal.DefaultSessionKey;
-import ratpack.util.Types;
+import ratpack.func.Types;
 
 import java.util.Objects;
 
@@ -74,9 +74,6 @@ public interface SessionKey<T> {
    * @return a session key
    */
   static <T> SessionKey<T> of(@Nullable String name, @Nullable Class<T> type) {
-    if (name == null && type == null) {
-      throw new IllegalArgumentException("one of name or type must not be null");
-    }
     return new DefaultSessionKey<>(name, type);
   }
 

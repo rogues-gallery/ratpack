@@ -16,9 +16,10 @@
 
 package ratpack.exec;
 
+import ratpack.func.Action;
+import ratpack.func.Predicate;
 import ratpack.exec.internal.CompleteExecResult;
 import ratpack.exec.internal.ResultBackedExecResult;
-import ratpack.registry.Registry;
 
 /**
  * The result of an execution.
@@ -30,7 +31,7 @@ public interface ExecResult<T> extends Result<T> {
   /**
    * Is the result that the execution completed without a value being returned.
    * <p>
-   * This can happen if the promise was {@link ratpack.exec.Promise#route(ratpack.func.Predicate, ratpack.func.Action) routed} instead of being returned to the caller,
+   * This can happen if the promise was {@link ratpack.exec.Promise#route(Predicate, Action) routed} instead of being returned to the caller,
    * or if the promise failed and the error was handled “upstream”.
    * In such a case, the code under test handled the promised value.
    * As the promise producing code dealt with the value, the tests will have to examine the side affects of this occurring.
@@ -38,17 +39,6 @@ public interface ExecResult<T> extends Result<T> {
    * @return true if the execution the promise was bound to completed before the promised value was provided.
    */
   boolean isComplete();
-
-  /**
-   * Deprecated. Do not use.
-   *
-   * @return the execution registry.
-   * @throws UnsupportedOperationException always
-   */
-  @Deprecated
-  default Registry getRegistry() throws UnsupportedOperationException {
-    throw new UnsupportedOperationException("ExecResult.getRegistry() has been removed.");
-  }
 
   /**
    * Wraps the given result as an exec result.

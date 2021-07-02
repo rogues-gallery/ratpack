@@ -16,20 +16,19 @@
 
 package ratpack.site;
 
-import asset.pipeline.ratpack.AssetPipelineModule;
 import com.google.common.base.Joiner;
 import com.google.common.collect.FluentIterable;
+import ratpack.core.server.BaseDir;
+import ratpack.core.server.RatpackServer;
 import ratpack.dropwizard.metrics.DropwizardMetricsModule;
+import ratpack.exec.registry.Registry;
 import ratpack.func.Block;
 import ratpack.func.Pair;
 import ratpack.groovy.template.MarkupTemplateModule;
 import ratpack.groovy.template.TextTemplateModule;
 import ratpack.guice.Guice;
 import ratpack.newrelic.NewRelicModule;
-import ratpack.registry.Registry;
 import ratpack.rx2.RxRatpack;
-import ratpack.server.BaseDir;
-import ratpack.server.RatpackServer;
 import ratpack.site.github.GitHubData;
 import ratpack.site.github.RatpackVersion;
 import ratpack.site.github.RatpackVersions;
@@ -48,7 +47,6 @@ public class SiteMain {
         .registry(
           Guice.registry(s -> s
               .module(NewRelicModule.class)
-              .module(new AssetPipelineModule())
               .module(new DropwizardMetricsModule(), c ->
                   c.csv(csv -> csv.enable(false))
               )
@@ -184,7 +182,7 @@ public class SiteMain {
               ctx.getResponse().getHeaders().add("Cache-Control", "max-age=" + longCache + ", public");
               ctx.next();
             })
-            .files(f -> f.dir("public").indexFiles("index.html"));
+            .files(f -> f.dir("public"));
         })
     );
   }

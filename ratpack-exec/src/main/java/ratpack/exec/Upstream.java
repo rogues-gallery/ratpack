@@ -16,6 +16,8 @@
 
 package ratpack.exec;
 
+import ratpack.func.Function;
+
 /**
  * An upstream asynchronous data source.
  * <p>
@@ -28,7 +30,7 @@ package ratpack.exec;
  * <p>
  * Multiple downstreams can connect to a single upstream.
  *
- * @see Promise#transform(ratpack.func.Function)
+ * @see Promise#transform(Function)
  * @param <T> the type of item emitted downstream
  */
 public interface Upstream<T> {

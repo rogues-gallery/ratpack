@@ -6,7 +6,15 @@ Library options include:
 
 * No-Op - discards all logs (default)
 * Log4J
+
+    Log4J allows a complete non blocking configuration by [making all loggers asynchronous](https://logging.apache.org/log4j/2.x/manual/async.html).
+    The most consistent way to achieve this is by providing the system property `-Dlog4j2.contextSelector=org.apache.logging.log4j.core.async.AsyncLoggerContextSelector`.
+    Log4J system properties can also be defined in the file `log4j2.component.properties` available in the classpath of the application. 
+    Read the [trade-offs](https://logging.apache.org/log4j/2.x/manual/async.html#Trade-offs) carefully, before setting this property. Log4J allows a [mixed
+    configuration](https://logging.apache.org/log4j/2.x/manual/async.html#MixedSync-Async) of synchronous and asynchronous loggers as well.
 * Logback - native SLF4J implementation with "zero memory and computational overhead"
+
+    Logback provides non blocking appenders around blocking ones. For details on how to configure them properly check out the [Logback manual](http://logback.qos.ch/manual/appenders.html#AsyncAppender)
 * Java Util Logging
 * Simple - logs messages at INFO level and higher to System.err
 * Jakarta Commons Logging
@@ -51,18 +59,18 @@ class LogExample {
 
 ## Request Logging
 
-Ratpack provides a mechanism for logging information about each request, [`RequestLogger`](api/ratpack/handling/RequestLogger.html).
+Ratpack provides a mechanism for logging information about each request, [`RequestLogger`](api/ratpack/core/handling/RequestLogger.html).
 The request logger is a handler.
 Each request that flows through it will be logged, when the request completes.
 Typically, it is placed early in the handler chain and added with the `Chain.all(Handler)` method so that all requests are logged.
  
-Ratpack provides the [`RequestLogger.ncsa()`](api/ratpack/handling/RequestLogger.html#ncsa--) method, that logs in the [NCSA Common Log Format](https://en.wikipedia.org/wiki/Common_Log_Format).
+Ratpack provides the [`RequestLogger.ncsa()`](api/ratpack/core/handling/RequestLogger.html#ncsa%28%29) method, that logs in the [NCSA Common Log Format](https://en.wikipedia.org/wiki/Common_Log_Format).
 This implementation logs to an slf4j logger named `ratpack.requests` 
-(the [`RequestLogger.ncsa(Logger)`](api/ratpack/handling/RequestLogger.html#ncsa-org.slf4j.Logger-) method allows an alternative logger to be specified).  
+(the [`RequestLogger.ncsa(Logger)`](api/ratpack/core/handling/RequestLogger.html#ncsa%28org.slf4j.Logger%29) method allows an alternative logger to be specified).  
 
 ```language-java
-import ratpack.handling.RequestLogger;
-import ratpack.http.client.ReceivedResponse;
+import ratpack.core.handling.RequestLogger;
+import ratpack.core.http.client.ReceivedResponse;
 import ratpack.test.embed.EmbeddedApp;
 import static org.junit.Assert.*;
 
@@ -81,4 +89,4 @@ public class Example {
 }
 ```
 
-See the documentation of [`RequestLogger`](api/ratpack/handling/RequestLogger.html) for information on creating a logger with an alternative format.
+See the documentation of [`RequestLogger`](api/ratpack/core/handling/RequestLogger.html) for information on creating a logger with an alternative format.

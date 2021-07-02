@@ -13,44 +13,50 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+plugins {
+  id "com.gradle.enterprise" version "3.6.1"
+  id "com.gradle.common-custom-user-data-gradle-plugin" version "1.1.1"
+}
+
+enableFeaturePreview("GROOVY_COMPILATION_AVOIDANCE")
+
+apply from: 'gradle/buildScan.gradle'
 
 include \
+    "ratpack-benchmark",
+    "ratpack-config",
+    "ratpack-consul",
     "ratpack-core",
-    "ratpack-manual",
-    "ratpack-site",
-    "ratpack-test",
-    "ratpack-test-internal",
+    "ratpack-dropwizard-metrics",
+    "ratpack-exec",
+    "ratpack-func",
+    "ratpack-gradle",
     "ratpack-groovy",
     "ratpack-groovy-test",
+    "ratpack-gson",
     "ratpack-guice",
     "ratpack-session",
     "ratpack-session-redis",
     "ratpack-gradle",
     "ratpack-handlebars",
-    "ratpack-reactor",
-    "ratpack-remote",
-    "ratpack-remote-test",
-    "ratpack-rx",
-    "ratpack-rx2",
-    "ratpack-dropwizard-metrics",
-    "ratpack-h2",
-    "ratpack-thymeleaf",
-    "ratpack-thymeleaf3",
-    "ratpack-lazybones",
     "ratpack-hikari",
+    "ratpack-h2",
+    "ratpack-jdbc-tx",
+    "ratpack-manual",
     "ratpack-newrelic",
-    "ratpack-pac4j",
-    "ratpack-hystrix",
+    "ratpack-reactor",
+    "ratpack-retrofit2",
+    "ratpack-rocker",
+    "ratpack-rx2",
+    "ratpack-session",
+    "ratpack-session-redis",
+    "ratpack-session-serialization-kryo",
+    "ratpack-site",
     "ratpack-spring-boot",
     "ratpack-spring-boot-starter",
-    "ratpack-benchmark",
-    "ratpack-retrofit2",
-    "ratpack-jdbc-tx",
-    "ratpack-consul",
-    "ratpack-base",
-    "ratpack-exec",
-    "ratpack-rocker",
-    "ratpack-gson"
+    "ratpack-test",
+    "ratpack-test-internal",
+    "ratpack-thymeleaf3"
 
 include "perf"
 
@@ -64,3 +70,18 @@ def setBuildFile(project) {
 }
 
 setBuildFile(rootProject)
+
+buildCache {
+  remote(HttpBuildCache) {
+    url = 'https://ge.ratpack.io/cache/'
+    def cacheUsername = System.getenv('GRADLE_ENTERPRISE_CACHE_USERNAME')
+    def cachePassword = System.getenv('GRADLE_ENTERPRISE_CACHE_PASSWORD')
+    if (cacheUsername && cachePassword) {
+      push = true
+      credentials {
+        username = cacheUsername
+        password = cachePassword
+      }
+    }
+  }
+}

@@ -19,12 +19,11 @@ package ratpack.site
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.inject.Provides
 import groovy.util.logging.Slf4j
-import ratpack.file.internal.FileSystemChecksumServices
 import ratpack.groovy.template.MarkupTemplate
 import ratpack.guice.ConfigurableModule
-import ratpack.http.client.HttpClient
-import ratpack.render.RenderableDecorator
-import ratpack.server.ServerConfig
+import ratpack.core.http.client.HttpClient
+import ratpack.core.render.RenderableDecorator
+import ratpack.core.server.ServerConfig
 import ratpack.site.github.*
 
 import javax.inject.Provider
@@ -69,7 +68,7 @@ class SiteModule extends ConfigurableModule<GitHubConfig> {
   @Provides
   @Singleton
   AssetLinkService assetLinkService(ServerConfig serverConfig) {
-    new AssetLinkService(FileSystemChecksumServices.service(serverConfig))
+    new AssetLinkService()
   }
 
   @Provides

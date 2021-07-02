@@ -20,8 +20,9 @@ import groovy.transform.CompileStatic
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import ratpack.http.MediaType
-import ratpack.http.internal.DefaultMediaType
+import ratpack.core.http.MediaType
+import ratpack.core.http.internal.DefaultMediaType
+import ratpack.test.internal.spock.InheritedTimeout
 
 import javax.net.ssl.*
 import java.security.SecureRandom
@@ -34,9 +35,10 @@ import static org.codehaus.groovy.runtime.StackTraceUtils.deepSanitize
 
 @SuppressWarnings("GrMethodMayBeStatic")
 @CompileStatic
+@InheritedTimeout(value = 30, unit = TimeUnit.MINUTES) // not actually used, test does its own timeout
 abstract class Crawler {
 
-  final int numThreads = Runtime.getRuntime().availableProcessors() * 4
+  final int numThreads = Boolean.getBoolean("cloudCi") ? Runtime.getRuntime().availableProcessors() : Runtime.getRuntime().availableProcessors() * 4
   final int retryLimit = 3
   final int retryWaitMillis = 200
   final int timeoutMins = 10

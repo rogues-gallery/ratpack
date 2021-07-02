@@ -28,10 +28,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import ratpack.func.Function;
 import ratpack.guice.Guice;
-import ratpack.registry.Registry;
-import ratpack.server.RatpackServer;
-import ratpack.server.ServerConfig;
-import ratpack.server.ServerConfigBuilder;
+import ratpack.exec.registry.Registry;
+import ratpack.core.server.RatpackServer;
+import ratpack.core.server.ServerConfig;
+import ratpack.core.server.ServerConfigBuilder;
 import ratpack.spring.Spring;
 import ratpack.spring.config.internal.ChainConfigurers;
 
@@ -49,16 +49,6 @@ public class RatpackConfiguration implements CommandLineRunner, DisposableBean {
   @Override
   public void run(String... args) throws Exception {
     server.start();
-  }
-
-  /**
-   * @deprecated since 1.6.0. Use {@link #destroy()} instead
-   * @throws Exception
-   * @see #destroy()
-   */
-  @Deprecated
-  public void stop() throws Exception {
-    destroy();
   }
 
   @Override

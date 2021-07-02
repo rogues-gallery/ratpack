@@ -33,15 +33,16 @@ import ratpack.exec.Operation;
 import ratpack.exec.Promise;
 import ratpack.exec.UnmanagedThreadException;
 import ratpack.func.Action;
-import ratpack.registry.RegistrySpec;
+import ratpack.func.Function;
+import ratpack.exec.registry.RegistrySpec;
 import ratpack.rx2.internal.DefaultSchedulers;
 import ratpack.rx2.internal.ErrorHandler;
 import ratpack.rx2.internal.ExecControllerBackedScheduler;
 import ratpack.rx2.internal.ExecutionBackedObserver;
 import ratpack.rx2.internal.ExecutionBackedSubscriber;
-import ratpack.stream.Streams;
-import ratpack.stream.TransformablePublisher;
-import ratpack.util.Exceptions;
+import ratpack.exec.stream.Streams;
+import ratpack.exec.stream.TransformablePublisher;
+import ratpack.func.Exceptions;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -77,7 +78,7 @@ public abstract class RxRatpack {
    * <p>
    * For a Java application, a convenient place to call this is in the handler factory implementation.
    * <pre class="java">{@code
-   * import ratpack.error.ServerErrorHandler;
+   * import ratpack.core.error.ServerErrorHandler;
    * import ratpack.rx2.RxRatpack;
    * import ratpack.test.embed.EmbeddedApp;
    * import io.reactivex.Observable;
@@ -117,7 +118,7 @@ public abstract class RxRatpack {
    * <p>
    * The returned Single emits the promise's single value if it succeeds, and emits the error (i.e. via {@code onError()}) if it fails.
    * <p>
-   * This method works well as a method reference to the {@link Promise#to(ratpack.func.Function)} method.
+   * This method works well as a method reference to the {@link Promise#to(Function)} method.
    * <pre class="java">{@code
    * import ratpack.rx2.RxRatpack;
    * import ratpack.exec.Promise;
@@ -347,7 +348,7 @@ public abstract class RxRatpack {
    * <p>
    * <pre class="java">{@code
    * import ratpack.rx2.RxRatpack;
-   * import ratpack.stream.Streams;
+   * import ratpack.exec.stream.Streams;
    * import ratpack.test.exec.ExecHarness;
    * import io.reactivex.Observable;
    * import io.reactivex.BackpressureStrategy;
@@ -391,7 +392,7 @@ public abstract class RxRatpack {
    * <p>
    * <pre class="java">{@code
    * import ratpack.rx2.RxRatpack;
-   * import ratpack.stream.Streams;
+   * import ratpack.exec.stream.Streams;
    * import ratpack.test.exec.ExecHarness;
    * import io.reactivex.Observable;
    * import io.reactivex.BackpressureStrategy;
@@ -539,7 +540,7 @@ public abstract class RxRatpack {
    * <p>
    * <pre class="java">{@code
    * import ratpack.exec.Execution;
-   * import ratpack.registry.RegistrySpec;
+   * import ratpack.exec.registry.RegistrySpec;
    * import ratpack.rx2.RxRatpack;
    * import ratpack.test.exec.ExecHarness;
    *
@@ -587,7 +588,7 @@ public abstract class RxRatpack {
    * <p>
    * <pre class="java">{@code
    * import ratpack.rx2.RxRatpack;
-   * import ratpack.util.Exceptions;
+   * import ratpack.func.Exceptions;
    * import ratpack.test.exec.ExecHarness;
    *
    * import io.reactivex.Observable;

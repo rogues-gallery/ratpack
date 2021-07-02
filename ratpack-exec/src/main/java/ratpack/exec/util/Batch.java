@@ -21,8 +21,8 @@ import ratpack.exec.ExecResult;
 import ratpack.exec.Operation;
 import ratpack.exec.Promise;
 import ratpack.func.BiAction;
-import ratpack.stream.Streams;
-import ratpack.stream.TransformablePublisher;
+import ratpack.exec.stream.Streams;
+import ratpack.exec.stream.TransformablePublisher;
 
 import java.util.List;
 

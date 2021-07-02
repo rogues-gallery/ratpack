@@ -18,12 +18,14 @@ package ratpack.exec
 
 import ratpack.func.Block
 import ratpack.test.exec.ExecHarness
-import spock.lang.Specification
+import spock.lang.AutoCleanup
+import ratpack.test.internal.BaseRatpackSpec
 
 import java.util.concurrent.CountDownLatch
 
-class PromiseBlockingSpec extends Specification {
+class PromiseBlockingSpec extends BaseRatpackSpec {
 
+  @AutoCleanup
   def exec = ExecHarness.harness()
 
   private <T> Promise<T> async(Result<T> t) {

@@ -21,7 +21,7 @@ import com.google.inject.Module;
 import ratpack.func.Action;
 import ratpack.guice.BindingsSpec;
 import ratpack.guice.ConfigurableModule;
-import ratpack.server.ServerConfig;
+import ratpack.core.server.ServerConfig;
 
 import java.util.List;
 
@@ -53,7 +53,7 @@ public class DefaultBindingsSpec implements BindingsSpec {
 
   private <T extends Module> T createModule(Class<T> clazz) {
     try {
-      return clazz.newInstance();
+      return clazz.getDeclaredConstructor().newInstance();
     } catch (ReflectiveOperationException e) {
       throw new IllegalStateException("Module " + clazz.getName() + " is not reflectively instantiable", e);
     }

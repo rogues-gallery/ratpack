@@ -22,8 +22,8 @@ import ratpack.func.Block;
 import ratpack.func.Function;
 import ratpack.groovy.Groovy;
 import ratpack.groovy.internal.ClosureUtil;
-import ratpack.util.Exceptions;
-import ratpack.util.internal.Paths2;
+import ratpack.func.Exceptions;
+import ratpack.func.Paths2;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;

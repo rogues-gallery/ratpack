@@ -19,7 +19,6 @@ apply plugin: "groovy"
 apply plugin: "jacoco"
 apply from: "$rootDir/gradle/checkstyle.gradle"
 apply from: "$rootDir/gradle/codenarc.gradle"
-apply from: "$rootDir/gradle/projectLocalRepo.gradle"
 
 dependencies {
   testCompile commonDependencies.groovy
@@ -30,26 +29,23 @@ dependencies {
 sourceCompatibility = "1.8"
 targetCompatibility = "1.8"
 
-tasks.withType(AbstractCompile) {
+tasks.withType(AbstractCompile).configureEach {
+  options.incremental = true
   options.compilerArgs << "-Werror" << "-Xlint:all" << "-Xlint:-options" << "-Xlint:-serial"
   options.compilerArgs << "-Xlint:-classfile" // Needed due to https://issues.jboss.org/browse/JASSIST-245
 }
 
 if (project.path != ":ratpack-benchmark") {
-  tasks.withType(JavaCompile) {
-    options.compilerArgs = ["-proc:none"]
+  tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add("-proc:none")
   }
-  tasks.withType(GroovyCompile) {
-    groovyOptions.forkOptions.memoryMaximumSize = "512m"
-    if (isCi) {
-      groovyOptions.forkOptions.memoryMaximumSize = "256m"
-    }
-    options.compilerArgs = ["-proc:none"]
-    allprojects { mustRunAfter tasks.withType(CodeNarc) }
+  tasks.withType(GroovyCompile).configureEach {
+    groovyOptions.forkOptions.memoryMaximumSize = "256m"
+    options.compilerArgs.add("-proc:none")
   }
 }
 
-tasks.withType(Javadoc) {
+tasks.withType(Javadoc).configureEach {
   options.encoding = "utf-8"
   options.docEncoding = "utf-8"
   options.charSet = "utf-8"
@@ -64,47 +60,38 @@ tasks.withType(Javadoc) {
   }
 }
 
-javadoc {
+tasks.named("javadoc", Javadoc) {
   options.links "http://ratpack.io/manual/${version - "-SNAPSHOT"}/api"
 }
 
-task sourceJar(type: Jar) {
-  description "An archive of the source code for Maven Central"
-  classifier "sources"
-  from sourceSets.main.allSource
-}
-
-task javadocJar(type: Jar) {
-  description "An archive of the JavaDocs for Maven Central"
-  classifier "javadoc"
-  from javadoc
-}
-
-artifacts {
-  published javadocJar, sourceJar, jar
-}
-
-tasks.withType(Test) {
-  allprojects {
-    mustRunAfter tasks.withType(Checkstyle)
-  }
+tasks.withType(Test).configureEach {
+  systemProperty "io.netty.allocator.type", "unpooled"
+  systemProperty "io.netty.leakDetectionLevel", "paranoid"
 
   jvmArgs "-Xss320k", "-XX:MaxDirectMemorySize=64m"
   minHeapSize "256m"
-  maxHeapSize "512m"
+  maxHeapSize "768m"
 
   testLogging {
     exceptionFormat "full"
   }
 
-  doFirst {
-    if (isCloudCi) {
-      maxParallelForks 1
-      systemProperty "cloudCi", "true"
-      testLogging {
-        events "started", "failed"
-      }
+  reports {
+    junitXml {
+      outputPerTestCase = true
     }
+  }
+
+  if (isCloudCi) {
+    systemProperty "cloudCi", "true"
+  }
+
+  doFirst {
+
+    // Workaround https://github.com/gradle/gradle/issues/1893
+    // Without this, we get Gradle's logging in our tests when we actually want log4j.
+    // This forces gradle to be last in the classpath, so our logging lib is found first by Slf4j.
+    classpath = files(classpath.files - dependencies.gradleTestKit().files) + dependencies.gradleTestKit().files
   }
 
   environment "GRADLE_USER_HOME", gradle.gradleUserHomeDir
@@ -114,15 +101,19 @@ jacoco {
   toolVersion = "0.8.2"
 }
 
-task codeQuality {
-  dependsOn tasks.withType(CodeNarc), tasks.withType(Checkstyle)
+tasks.register("codeQuality") {
+  it.dependsOn tasks.withType(CodeNarc), tasks.withType(Checkstyle)
 }
 
-jacocoTestReport {
-  additionalSourceDirs = files(sourceSets.main.allSource.srcDirs)
-  sourceDirectories = files(sourceSets.main.allSource.srcDirs)
-  classDirectories = files(sourceSets.main.output)
-  reports {
+tasks.named("sanityCheck") {
+  it.dependsOn(tasks.named("codeQuality"))
+}
+
+tasks.named("jacocoTestReport", JacocoReport) {
+  it.additionalSourceDirs.from(files(sourceSets.main.allSource.srcDirs))
+  it.sourceDirectories.from(files(sourceSets.main.allSource.srcDirs))
+  it.classDirectories.from(files(sourceSets.main.output))
+  it.reports {
     html.enabled = true
     xml.enabled = true
     csv.enabled = false

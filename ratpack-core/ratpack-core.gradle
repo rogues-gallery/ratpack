@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+
 description = "The core HTTP and composition mechanisms of Ratpack"
 
 apply from: "$rootDir/gradle/javaModule.gradle"
@@ -33,11 +34,17 @@ ext.apiLinks = [
 
 dependencies {
   compile project(":ratpack-exec")
+  compile project(":ratpack-config")
   compile "io.netty:netty-codec-http:$commonVersions.netty"
   compile "io.netty:netty-handler:$commonVersions.netty"
+  compile "io.netty:netty-handler-proxy:$commonVersions.netty"
+  compile "io.netty:netty-resolver-dns:$commonVersions.netty"
+  runtime "io.netty:netty-resolver-dns-native-macos:$commonVersions.netty:osx-x86_64"
   compile 'com.sun.activation:javax.activation:1.2.0'
 
-  compile "com.github.ben-manes.caffeine:caffeine:${commonVersions.caffeine}"
+  compile("com.github.ben-manes.caffeine:caffeine:${commonVersions.caffeine}") {
+    exclude group: "com.google.errorprone", module: "error_prone_annotations"
+  }
 
   compile 'org.javassist:javassist:3.22.0-GA'
 
@@ -53,9 +60,11 @@ dependencies {
   compile "com.fasterxml.jackson.datatype:jackson-datatype-jdk8:${commonVersions.jackson}"
   compile "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${commonVersions.jackson}"
 
-  testCompile 'org.apache.commons:commons-lang3:3.3.2'
+  testCompile "org.apache.commons:commons-lang3:${commonVersions.commonsLang3}"
 
-  testCompile 'com.opencsv:opencsv:3.3'
+  testCompile('com.opencsv:opencsv:3.3') {
+    exclude group: "org.apache.commons", module: "commons-lang3"
+  }
   testCompile('com.github.tomakehurst:wiremock:1.56') {
     exclude group: "org.slf4j", module: "slf4j-api"
     exclude group: "com.fasterxml.jackson.core", module: "jackson-annotations"
@@ -66,7 +75,7 @@ dependencies {
 }
 
 test {
-  maxParallelForks = 3
+  maxParallelForks = isCi ? 2 : 3
 }
 
 // Reactive Streams TCK uses TestNG, and Gradle can't run TestNG and JUnit in the same run.
@@ -85,5 +94,5 @@ task streamTckTest(type: Test) {
     junitXml.destination = binResultsDir.parentFile
   }
 
-  maxParallelForks = 4
+  maxParallelForks = isCi ? 2 : 4
 }

@@ -20,7 +20,7 @@ import ratpack.exec.*;
 import ratpack.exec.internal.DefaultExecController;
 import ratpack.func.Action;
 import ratpack.func.Function;
-import ratpack.registry.RegistrySpec;
+import ratpack.exec.registry.RegistrySpec;
 import ratpack.test.exec.internal.DefaultExecHarness;
 
 /**
@@ -229,6 +229,10 @@ public interface ExecHarness extends AutoCloseable {
     yield(e -> function.apply(e).promise()).getValueOrThrow();
   }
 
+  default void execute(Action<? super RegistrySpec> registry, Function<? super Execution, ? extends Operation> function) throws Exception {
+    yield(registry, e -> function.apply(e).promise()).getValueOrThrow();
+  }
+
   default void execute(Operation operation) throws Exception {
     execute(e -> operation);
   }
@@ -236,6 +240,12 @@ public interface ExecHarness extends AutoCloseable {
   static void executeSingle(Function<? super Execution, ? extends Operation> function) throws Exception {
     try (ExecHarness harness = harness()) {
       harness.execute(function);
+    }
+  }
+
+  static void executeSingle(Action<? super RegistrySpec> registry, Function<? super Execution, ? extends Operation> function) throws Exception {
+    try (ExecHarness harness = harness()) {
+      harness.execute(registry, function);
     }
   }
 

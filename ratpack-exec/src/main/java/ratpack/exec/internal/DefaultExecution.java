@@ -25,16 +25,17 @@ import io.netty.util.internal.PlatformDependent;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ratpack.api.Nullable;
+import ratpack.func.Nullable;
 import ratpack.exec.*;
 import ratpack.func.Action;
 import ratpack.func.Block;
-import ratpack.registry.MutableRegistry;
-import ratpack.registry.NotInRegistryException;
-import ratpack.registry.Registry;
-import ratpack.registry.RegistrySpec;
-import ratpack.registry.internal.DefaultMutableRegistry;
-import ratpack.stream.TransformablePublisher;
+import ratpack.func.Factory;
+import ratpack.exec.registry.MutableRegistry;
+import ratpack.exec.registry.NotInRegistryException;
+import ratpack.exec.registry.Registry;
+import ratpack.exec.registry.RegistrySpec;
+import ratpack.exec.registry.internal.DefaultMutableRegistry;
+import ratpack.exec.stream.TransformablePublisher;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -200,6 +201,40 @@ public class DefaultExecution implements Execution {
   public void bindToThread() {
     thread = Thread.currentThread();
     ExecThreadBinding.require().setExecution(this);
+  }
+
+  public <T> T runSync(Factory<T> factory) throws Exception {
+    if (isBound()) {
+      return factory.create();
+    }
+
+    if (ExecThreadBinding.require().getExecution() != null) {
+      throw new IllegalStateException("execution already bound");
+    }
+    class Work implements Block {
+      T result;
+
+      @Override
+      public void execute() throws Exception {
+        result = factory.create();
+      }
+    }
+    Work work = new Work();
+    bindToThread();
+    try {
+      intercept(this, ExecInterceptor.ExecType.COMPUTE, interceptors.iterator(), work);
+    } finally {
+      unbindFromThread();
+    }
+    return work.result;
+  }
+
+  public static void intercept(Execution execution, ExecInterceptor.ExecType execType, final Iterator<? extends ExecInterceptor> interceptors, Block runnable) throws Exception {
+    if (interceptors.hasNext()) {
+      interceptors.next().intercept(execution, execType, () -> intercept(execution, execType, interceptors, runnable));
+    } else {
+      runnable.execute();
+    }
   }
 
   public static void interceptorError(Throwable e) {

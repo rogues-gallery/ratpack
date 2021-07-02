@@ -23,7 +23,7 @@ import ratpack.exec.Operation;
 import ratpack.func.Block;
 import ratpack.jdbctx.Transaction;
 import ratpack.test.exec.ExecHarness;
-import ratpack.util.Exceptions;
+import ratpack.func.Exceptions;
 
 import javax.sql.DataSource;
 import java.sql.Connection;

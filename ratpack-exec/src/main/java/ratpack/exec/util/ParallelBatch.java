@@ -23,7 +23,7 @@ import ratpack.exec.Promise;
 import ratpack.exec.util.internal.DefaultParallelBatch;
 import ratpack.func.Action;
 import ratpack.func.BiAction;
-import ratpack.stream.TransformablePublisher;
+import ratpack.exec.stream.TransformablePublisher;
 
 import java.util.Arrays;
 import java.util.List;

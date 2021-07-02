@@ -19,7 +19,7 @@ package ratpack.site.github
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectReader
 import ratpack.exec.Promise
-import ratpack.http.client.HttpClient
+import ratpack.core.http.client.HttpClient
 
 @javax.inject.Singleton
 class GitHubApi {
@@ -31,7 +31,7 @@ class GitHubApi {
   GitHubApi(String api, String authToken, ObjectReader objectReader, HttpClient httpClient) {
     this.api = api
     this.authToken = authToken
-    this.requester = new GithubRequester(objectReader, httpClient)
+    this.requester = new GithubRequester(objectReader, authToken, httpClient)
   }
 
   private Promise<JsonNode> get(String path, Map<String, String> params) {
@@ -47,9 +47,6 @@ class GitHubApi {
   }
 
   private String toQueryString(Map<String, String> params) {
-    if (authToken) {
-      params += [access_token: authToken]
-    }
     "?" + (
       (params + [per_page: "100"]).collect { String k, String v ->
         URLEncoder.encode(k, "UTF-8") + "=" + URLEncoder.encode(v, "UTF-8")

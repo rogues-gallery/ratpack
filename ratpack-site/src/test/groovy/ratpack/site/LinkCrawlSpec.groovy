@@ -19,11 +19,13 @@ package ratpack.site
 import groovy.util.logging.Slf4j
 import ratpack.site.crawl.Crawler
 import ratpack.site.crawl.PrettyPrintCollection
-import ratpack.util.RatpackVersion
-import spock.lang.Specification
+import ratpack.test.internal.BaseRatpackSpec
+import ratpack.test.internal.spock.InheritedTimeout
+import ratpack.exec.util.RatpackVersion
 
 @Slf4j
-class LinkCrawlSpec extends Specification {
+@InheritedTimeout(180)
+class LinkCrawlSpec extends BaseRatpackSpec {
 
   def "site has no bad links"() {
     given:
@@ -47,10 +49,6 @@ class LinkCrawlSpec extends Specification {
     ]
 
     def crawler = new Crawler(aut.address.toString()) {
-      boolean shouldUseHeadRequest(Link url) {
-        return url.uri.host != "bintray.com" && super.shouldUseHeadRequest(url)
-      }
-
       @Override
       boolean isCrawlable(Link link) {
         if (link.uri.path.startsWith("/manual") && !link.uri.path.startsWith("/manual/${RatpackVersion.version - "-SNAPSHOT"}")) {

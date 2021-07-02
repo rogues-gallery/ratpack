@@ -16,7 +16,7 @@
 
 package ratpack.reactor.flux
 
-import ratpack.error.ServerErrorHandler
+import ratpack.core.error.ServerErrorHandler
 import ratpack.exec.Blocking
 import ratpack.reactor.ReactorRatpack
 import ratpack.test.internal.RatpackGroovyDslSpec
@@ -66,7 +66,7 @@ class ReactorBlockingSpec extends RatpackGroovyDslSpec {
         }) map({
           it * 2
         } as Function) map({
-          throw new Exception("!!!!")
+          throw new RuntimeException("!!!!")
         } as Function) subscribe{
           render "shouldn't happen"
         }
@@ -74,7 +74,7 @@ class ReactorBlockingSpec extends RatpackGroovyDslSpec {
     }
 
     then:
-    getText("a").startsWith new Exception("!!!!").toString()
+    getText("a").startsWith new RuntimeException("!!!!").toString()
     response.statusCode == 500
   }
 

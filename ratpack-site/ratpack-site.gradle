@@ -15,19 +15,24 @@
  */
 import ratpack.gradle.WriteTestConfig
 
+import io.freefair.gradle.plugins.jsass.SassCompile
+
 import static org.apache.commons.io.FileUtils.copyURLToFile
 import static org.apache.commons.lang3.SystemUtils.*
 
 buildscript {
   repositories {
-    jcenter()
+    mavenCentral()
+    gradlePluginPortal()
+    maven { url 'https://jitpack.io' }
   }
   dependencies {
-    classpath 'com.bertramlabs.plugins:asset-pipeline-gradle:2.6.1'
     classpath 'com.github.jengelman.gradle.plugins:shadow:5.1.0'
-    classpath 'com.bertramlabs.plugins:sass-asset-pipeline:2.6.1'
     classpath 'org.codehaus.groovy.modules.http-builder:http-builder:0.7.2'
-    classpath "org.jruby:jruby-complete:9.1.17.0"
+    classpath "io.freefair.gradle:jsass-plugin:5.3.0"
+    // Use the master version of gradle-js-plugin since it fixes a Gradle 6 deprecation (from JitPack.io)
+    classpath "com.github.eriwen:gradle-js-plugin:d15f4ae"
+    classpath "com.google.javascript:closure-compiler:v20150315"
   }
 }
 
@@ -35,10 +40,46 @@ apply from: "$rootDir/gradle/javaModule.gradle"
 apply plugin: "io.ratpack.ratpack-java"
 apply plugin: "org.gradle.groovy"
 apply plugin: 'com.github.johnrengelman.shadow'
-apply plugin: 'asset-pipeline'
+apply plugin: 'io.freefair.jsass-base'
 
 repositories {
-  maven { url "https://oss.jfrog.org/repo" }
+  exclusiveContent {
+    forRepository {
+      maven {
+        url "https://oss.jfrog.org/oss-release-local"
+        metadataSources { artifact() }
+      }
+    }
+    filter {
+      it.includeVersionByRegex("io.ratpack", "ratpack-manual", "1\\.9\\.0-rc-2|1\\.5\\.0-rc-[123]")
+    }
+  }
+  exclusiveContent {
+    forRepository {
+      mavenCentral() {
+        name "mavenCentralManualsNoPom"
+        metadataSources { artifact() }
+      }
+    }
+    filter {
+      it.includeVersionByRegex("io.ratpack", "ratpack-manual", "^(?!1\\.9\\.0-rc-2\$|1\\.5\\.0-rc-[123]\$|.+-SNAPSHOT\$).*")
+    }
+  }
+  exclusiveContent {
+    forRepository {
+      maven {
+        name "snap"
+        url "https://oss.sonatype.org/content/repositories/snapshots/"
+        metadataSources { artifact() }
+      }
+    }
+    filter {
+      it.includeVersionByRegex("io.ratpack", "ratpack-manual", ".+-SNAPSHOT")
+    }
+  }
+  mavenCentral()
+  jcenter()
+
 }
 
 ext {
@@ -55,14 +96,18 @@ ext {
     "1.2.0-RC-1", "1.2.0-rc-2", "1.2.0",
     "1.3.0-rc-1", "1.3.0-rc-2", "1.3.0", "1.3.1", "1.3.2", "1.3.3",
     "1.4.0-rc-1", "1.4.0-rc-2", "1.4.0-rc-3", "1.4.0", "1.4.1", "1.4.2", "1.4.3", "1.4.4", "1.4.5", "1.4.6",
-    "1.5.0-rc-1", "1.5.0-rc-2", "1.5.0-rc-3", "1.5.0", "1.5.1", "1.5.2", "1.5.3", "1.5.4",
+    "1.5.0-rc-1", "1.5.0-rc-2", "1.5.0-rc-3", // Note: these aren't available on Maven Central because the POMs weren't signed
+    "1.5.0", "1.5.1", "1.5.2", "1.5.3", "1.5.4",
     "1.6.0-rc-1", "1.6.0-rc-2", "1.6.0-rc-3", "1.6.0-rc-4", "1.6.0", "1.6.1",
-    "1.7.0", "1.7.1"
+    "1.7.0", "1.7.1", "1.7.2", "1.7.3", "1.7.4", "1.7.5", "1.7.6",
+    "1.8.0", "1.8.1", "1.8.2",
+    "1.9.0-rc-1", "1.9.0-rc-2", "1.9.0",
+    "1.10.0-SNAPSHOT"
   ]
 
   if (!isHeroku && !isCi) {
-    println "Only including latest manual in site due to this being a development build."
-    manualVersions = [manualVersions.last()]
+    logger.info("Only including latest manual in site due to this being a development build.")
+//    manualVersions = [manualVersions.last(), "1.9.0-SNAPSHOT"]
   }
 }
 
@@ -98,36 +143,18 @@ sourceSets {
 dependencies {
   compile project(":ratpack-groovy")
   compile project(":ratpack-dropwizard-metrics")
-  compile project(":ratpack-remote")
   compile project(":ratpack-rx2")
   compile project(":ratpack-newrelic")
   compile "org.pegdown:pegdown:${commonVersions.pegdown}"
-
-  compile('com.bertramlabs.plugins:ratpack-asset-pipeline:2.6.1') {
-    exclude group: "org.slf4j", module: "slf4j-api"
-    exclude group: "io.ratpack", module: "ratpack-guice"
-    exclude group: "commons-logging", module: "commons-logging"
-    exclude group: "com.google.code.gson", module: "gson"
-    exclude group: "com.google.guava", module: "guava"
-    exclude group: "org.codehaus.groovy", module: "groovy-all"
-  }
-  compile('com.bertramlabs.plugins:sass-asset-pipeline:2.6.1') {
-    exclude group: "org.jruby", module: "jruby-complete"
-    exclude group: "commons-logging", module: "commons-logging"
-    exclude group: "com.google.code.gson", module: "gson"
-    exclude group: "com.google.guava", module: "guava"
-  }
-  providedRuntime "org.jruby:jruby-complete:1.7.18"
 
   runtime "org.apache.logging.log4j:log4j-slf4j-impl:${commonVersions.log4j}", {
     exclude group: "org.slf4j", module: "slf4j-api"
   }
   runtime "org.apache.logging.log4j:log4j-api:${commonVersions.log4j}"
   runtime "org.apache.logging.log4j:log4j-core:${commonVersions.log4j}"
-  runtime 'com.lmax:disruptor:3.3.2'
+  runtime 'com.lmax:disruptor:3.4.2'
 
   testCompile project(":ratpack-groovy-test")
-  testCompile project(":ratpack-remote-test")
   testCompile project(":ratpack-test-internal")
   testCompile commonDependencies.spock
   testCompile 'org.jsoup:jsoup:1.8.1'
@@ -151,12 +178,27 @@ dependencies {
 
 mainClassName = 'ratpack.site.SiteMain'
 
-shadowJar {
-  dependencies {
-    exclude(dependency("com.bertramlabs.plugins:sass-asset-pipeline:.*"))
-    exclude(dependency("org.jruby:jruby-complete:.*"))
-  }
+tasks.withType(Zip) {
   zip64 = true
+}
+
+task compileSass(type: SassCompile) {
+  doFirst { destinationDir.get().asFile.deleteDir() }
+  source = "src/assets/sass"
+  includePaths.from "$rootDir/shared-web-assets/sass"
+  includePaths.from "$rootDir/shared-web-assets"
+  destinationDir = file("build/assets/css")
+}
+
+task jsAll(type: com.eriwen.gradle.js.tasks.CombineJsTask) {
+  source = [
+    "${rootDir}/shared-web-assets/js/modernizr.js",
+    "${rootDir}/shared-web-assets/js/prism.js",
+  ]
+  dest = file("${buildDir}/assets/js/all.min.js")
+}
+
+shadowJar {
 }
 
 task downloadChromeDriver {
@@ -215,7 +257,7 @@ task writeTestConfig(type: WriteTestConfig) {
   generatedTestResourcesDir = project.generatedTestResourcesDir
 
   testProperties.putAll(
-    manualVersions: manualVersions.join(','),
+    manualVersions: manualVersions.collect { it - "-SNAPSHOT" }.join(','),
     currentVersion: version
   )
 }
@@ -231,7 +273,7 @@ processResources {
   }
   def configureManualExtraction = { configuration, label ->
     inputs.files configuration
-    into "manual/$label", {
+    into "manual/${label - "-SNAPSHOT"}", {
       from { zipTree(configuration.singleFile) }
     }
   }
@@ -240,8 +282,25 @@ processResources {
     configureManualExtraction(configurations["manual-$it"], it)
   }
 
-  from assetCompile, {
-    into "assets"
+  into("public") {
+    from compileSass
+    from jsAll
+
+    [
+      "": ["src/assets/images", "src/assets/css"],
+      images: ["$rootDir/shared-web-assets/images"],
+      fonts: ["$rootDir/shared-web-assets/fonts"]
+    ].each { destination, source ->
+      if (destination) {
+        into("public/$destination") {
+          from(source)
+        }
+      } else {
+        into("public") {
+          from(source)
+        }
+      }
+    }
   }
 }
 
@@ -260,17 +319,10 @@ distTar {
   version = null
 }
 
-idea {
-  module {
-    testSourceDirs += sourceSets.browserTest.allSource.srcDirs
-    scopes.TEST.plus += [configurations.browserTestCompile]
-  }
-}
+run.ext.set("ratpack.flattenClassloaders", true)
 
-run {
-  if (it.getClass().name.startsWith("ratpack.gradle.continuous.RatpackContinuousRun")) {
-    flattenClassloaders = true
-  }
+distZip {
+  enabled = false
 }
 
 task deployToHeroku(type: SourceTask) {

@@ -21,7 +21,7 @@ buildscript {
     }
   }
   dependencies {
-    classpath "com.gradle.publish:plugin-publish-plugin:0.9.7"
+    classpath "com.gradle.publish:plugin-publish-plugin:0.12.0"
   }
 }
 
@@ -29,12 +29,11 @@ description = "Build time Ratpack support with the Gradle build tool - http://gr
 
 apply from: "$rootDir/gradle/javaModule.gradle"
 apply from: "$rootDir/gradle/versionFile.gradle"
-apply plugin: "maven"
 
 configurations.testCompile.dependencies.clear()
 
-sourceCompatibility = "1.6"
-targetCompatibility = "1.6"
+sourceCompatibility = "1.8"
+targetCompatibility = "1.8"
 
 dependencies {
   compile gradleApi()
@@ -46,9 +45,11 @@ dependencies {
   }
 }
 
+apiModules.each { evaluationDependsOn(it.path) }
+
 test {
-  dependsOn install
-  dependsOn { apiModules*.install }
+  dependsOn "publishAllPublicationsToProjectLocalRepository"
+  dependsOn { apiModules*.publishAllPublicationsToProjectLocalRepository }
   onlyIf { !System.getenv('CI_GROOVY_VERSION') }
   allprojects {
     if (it == project) {
@@ -78,6 +79,14 @@ pluginBundle {
       displayName = 'Ratpack Groovy Gradle Plugin'
       description = 'This plugin provides build time integration for Groovy based Ratpack applications.'
       tags = ['groovy', 'application', 'web', 'http', 'ratpack']
+    }
+  }
+}
+
+tasks.named("publishPlugins") {
+  it.doFirst {
+    if (isSnapshot) {
+      throw new GradleException("Cannot publish snapshot Gradle plugin (version is ${project.version})")
     }
   }
 }

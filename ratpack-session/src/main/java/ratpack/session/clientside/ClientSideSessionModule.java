@@ -37,7 +37,7 @@ import javax.crypto.spec.SecretKeySpec;
  * <h3>Example usage</h3>
  * <pre class="java">{@code
  * import ratpack.guice.Guice;
- * import ratpack.http.client.ReceivedResponse;
+ * import ratpack.core.http.client.ReceivedResponse;
  * import ratpack.session.Session;
  * import ratpack.session.SessionKey;
  * import ratpack.session.SessionModule;
@@ -86,13 +86,19 @@ import javax.crypto.spec.SecretKeySpec;
  *       assertEquals("foo", response.getBody().getText());
  *       assertTrue("We set a value and our session name", response.getHeaders().getAll("Set-Cookie")
  *          .stream()
- *          .anyMatch(c -> c.startsWith("session_name")));
+ *          .anyMatch(c -> c.contains("session_name_0=")));
+ *       assertTrue("We updated the last-access-time", response.getHeaders().getAll("Set-Cookie")
+ *          .stream()
+ *          .anyMatch(c -> c.contains("session_name_lat_0=")));
  *
  *       response = client.get();
  *       assertEquals("foo", response.getBody().getText());
  *       assertFalse("We did not update session", response.getHeaders().getAll("Set-Cookie")
  *          .stream()
- *          .anyMatch(c -> c.startsWith("session_name")));
+ *          .anyMatch(c -> c.contains("session_name_0=")));
+ *       assertTrue("We updated the last-access-time", response.getHeaders().getAll("Set-Cookie")
+ *         .stream()
+ *         .anyMatch(c -> c.contains("session_name_lat_0=")));
  *     });
  *   }
  * }
@@ -127,7 +133,7 @@ public class ClientSideSessionModule extends ConfigurableModule<ClientSideSessio
   @Provides
   @Singleton
   Signer signer(ClientSideSessionConfig config) {
-    byte[] token = config.getSecretToken().getBytes(CharsetUtil.UTF_8);
+    byte[] token = config.getSecretToken().getBytes(CharsetUtil.ISO_8859_1);
     return new DefaultSigner(new SecretKeySpec(token, config.getMacAlgorithm()));
   }
 
@@ -137,7 +143,7 @@ public class ClientSideSessionModule extends ConfigurableModule<ClientSideSessio
     if (config.getSecretKey() == null || config.getCipherAlgorithm() == null) {
       return NoCrypto.INSTANCE;
     } else {
-      return new DefaultCrypto(config.getSecretKey().getBytes(CharsetUtil.UTF_8), config.getCipherAlgorithm());
+      return new DefaultCrypto(config.getSecretKey().getBytes(CharsetUtil.ISO_8859_1), config.getCipherAlgorithm());
     }
   }
 

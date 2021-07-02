@@ -22,8 +22,10 @@ import groovy.lang.DelegatesTo;
 import groovy.lang.GroovySystem;
 import groovy.xml.MarkupBuilder;
 import io.netty.util.CharsetUtil;
-import ratpack.api.Nullable;
-import ratpack.file.FileSystemBinding;
+import ratpack.core.handling.Context;
+import ratpack.core.server.*;
+import ratpack.func.Nullable;
+import ratpack.config.FileSystemBinding;
 import ratpack.func.Action;
 import ratpack.func.Function;
 import ratpack.groovy.handling.*;
@@ -41,16 +43,15 @@ import ratpack.groovy.template.MarkupTemplate;
 import ratpack.groovy.template.TextTemplate;
 import ratpack.guice.BindingsSpec;
 import ratpack.guice.Guice;
-import ratpack.handling.Chain;
-import ratpack.handling.Handler;
-import ratpack.handling.Handlers;
-import ratpack.handling.internal.ChainBuilders;
-import ratpack.http.internal.HttpHeaderConstants;
-import ratpack.registry.Registry;
-import ratpack.server.*;
-import ratpack.server.internal.BaseDirFinder;
-import ratpack.server.internal.FileBackedReloadInformant;
-import ratpack.util.internal.Paths2;
+import ratpack.core.handling.Chain;
+import ratpack.core.handling.Handler;
+import ratpack.core.handling.Handlers;
+import ratpack.core.handling.internal.ChainBuilders;
+import ratpack.core.http.internal.HttpHeaderConstants;
+import ratpack.exec.registry.Registry;
+import ratpack.core.server.internal.BaseDirFinder;
+import ratpack.core.server.internal.FileBackedReloadInformant;
+import ratpack.func.Paths2;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -60,7 +61,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 
-import static ratpack.util.Exceptions.uncheck;
+import static ratpack.func.Exceptions.uncheck;
 
 /**
  * Static methods for specialized Groovy integration.
@@ -548,7 +549,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based template, using no model and the default content type.
+   * Creates a {@link Context#render(Object) renderable} Groovy based template, using no model and the default content type.
    *
    * @param id The id/name of the template
    * @return a template
@@ -558,7 +559,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based markup template, using no model and the default content type.
+   * Creates a {@link Context#render(Object) renderable} Groovy based markup template, using no model and the default content type.
    *
    * @param id The id/name of the template
    * @return a template
@@ -568,7 +569,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based template, using no model.
+   * Creates a {@link Context#render(Object) renderable} Groovy based template, using no model.
    *
    * @param id The id/name of the template
    * @param type The content type of template
@@ -579,7 +580,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based markup template, using no model.
+   * Creates a {@link Context#render(Object) renderable} Groovy based markup template, using no model.
    *
    * @param id The id/name of the template
    * @param type The content type of template
@@ -590,7 +591,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based template, using the default content type.
+   * Creates a {@link Context#render(Object) renderable} Groovy based template, using the default content type.
    *
    * @param model The template model
    * @param id The id/name of the template
@@ -601,7 +602,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based markup template, using the default content type.
+   * Creates a {@link Context#render(Object) renderable} Groovy based markup template, using the default content type.
    *
    * @param model The template model
    * @param id The id/name of the template
@@ -612,7 +613,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based markup template, using the default content type.
+   * Creates a {@link Context#render(Object) renderable} Groovy based markup template, using the default content type.
    *
    * @param id the id/name of the template
    * @param modelBuilder an action the builds a model map
@@ -623,7 +624,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based markup template.
+   * Creates a {@link Context#render(Object) renderable} Groovy based markup template.
    *
    * @param id the id/name of the template
    * @param type The content type of template
@@ -636,7 +637,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based template.
+   * Creates a {@link Context#render(Object) renderable} Groovy based template.
    *
    * @param model The template model
    * @param id The id/name of the template
@@ -648,7 +649,7 @@ public abstract class Groovy {
   }
 
   /**
-   * Creates a {@link ratpack.handling.Context#render(Object) renderable} Groovy based template.
+   * Creates a {@link Context#render(Object) renderable} Groovy based template.
    *
    * @param model The template model
    * @param id The id/name of the template
@@ -688,14 +689,14 @@ public abstract class Groovy {
    * @return The created action
    */
   public static Action<Chain> chain(@DelegatesTo(value = GroovyChain.class, strategy = Closure.DELEGATE_FIRST) final Closure<?> closure) throws Exception {
-    return (c) -> Groovy.chain(c, closure);
+    return c -> Groovy.chain(c, closure);
   }
 
   /**
    * Shorthand for {@link #markupBuilder(CharSequence, Charset, Closure)} with a content type of {@code "text/html"} and {@code "UTF-8"} encoding.
    *
    * @param closure The html definition
-   * @return A renderable object (i.e. to be used with the {@link ratpack.handling.Context#render(Object)} method
+   * @return A renderable object (i.e. to be used with the {@link Context#render(Object)} method
    */
   public static Markup htmlBuilder(@DelegatesTo(value = MarkupBuilder.class, strategy = Closure.DELEGATE_FIRST) Closure<?> closure) {
     return markupBuilder(HttpHeaderConstants.HTML_UTF_8, CharsetUtil.UTF_8, closure);
@@ -717,7 +718,7 @@ public abstract class Groovy {
    * @param contentType The content type of the markup
    * @param encoding The character encoding of the markup
    * @param closure The definition of the markup
-   * @return A renderable object (i.e. to be used with the {@link ratpack.handling.Context#render(Object)} method
+   * @return A renderable object (i.e. to be used with the {@link Context#render(Object)} method
    */
   public static Markup markupBuilder(CharSequence contentType, CharSequence encoding, @DelegatesTo(value = MarkupBuilder.class, strategy = Closure.DELEGATE_FIRST) Closure<?> closure) {
     return new Markup(contentType, Charset.forName(encoding.toString()), closure);

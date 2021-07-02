@@ -13,13 +13,10 @@ head {
   meta(name: 'description', content: 'Ratpack apps are lightweight, fast, composable with other tools and libraries, easy to test and enjoyable to develop.')
   meta(name: 'viewport', content: 'width=device-width, initial-scale=1')
 
-  link(rel: 'author', href: '/assets/humans.txt')
-  link(rel: 'stylesheet', href: assets['normalize/normalize.css'])
-  link(rel: 'stylesheet', href: assets['ratpack.css'])
-  link(rel: 'stylesheet', href: assets['fonts.css'])
+  link(rel: 'stylesheet', href: assets['normalize.css'])
+  link(rel: 'stylesheet', href: assets['site.css'])
 
-  script(src: assets['modernizr/modernizr.js']) {}
-  script(src: assets['prism/prism.js']) {}
+  script(src: assets['all.min.js']) {}
 }
 body {
   header(id: 'page-header') {
@@ -58,23 +55,7 @@ body {
           }
           p {
             a(href: 'http://www.yourkit.com/java/profiler/index.jsp', 'YourKit')
-            yield ' supports Ratpack open source project with its full-featured Java Profiler.'
-          }
-        }
-        def credits = [
-          [href: 'https://bintray.com/', img: [src: 'bintray.png', alt: 'Bintray', width: 55, height: 40]],
-          [href: 'https://github.com/', img: [src: 'github.png', alt: 'Octocat', width: 122, height: 40]],
-          [href: 'http://www.gradle.org/', img: [src: 'gradle-white-primary.png', alt: 'Gradle logo', width: 128, height: 43]],
-          [href: 'http://groovy-lang.org/', img: [src: 'groovy.png', alt: 'Groovy logo', width: 80, height: 40]],
-          [href: 'https://www.heroku.com/', img: [src: 'heroku.png', alt: 'Heroku logo', width: 120, height: 40]],
-          [href: 'http://netty.io/', img: [src: 'netty.png', alt: 'Netty logo', width: 80, height: 40]],
-          [href: 'http://www.yourkit.com/java/profiler/index.jsp', img: [src: 'yourkit.png', alt: 'YourKit logo', width: 132, height: 43]]
-        ]
-        section(class: 'credits') {
-          credits.each { credit ->
-            a(href: credit.href, rel: 'external') {
-              img(src: assets["${credit.img.src}"], alt: credit.img.alt, width: credit.img.width, height: credit.img.height)
-            }
+            yield ' supports Ratpack with its full-featured Java Profiler.'
           }
         }
       }

@@ -110,7 +110,7 @@ import ratpack.func.Block;
  * }
  * }</pre>
  *
- * @see Execution#addInterceptor(ExecInterceptor, ratpack.func.Block)
+ * @see Execution#addInterceptor(ExecInterceptor, Block)
  */
 @FunctionalInterface
 public interface ExecInterceptor {

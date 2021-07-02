@@ -24,11 +24,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufOutputStream;
 import ratpack.gson.GsonRender;
-import ratpack.handling.Context;
-import ratpack.http.internal.HttpHeaderConstants;
-import ratpack.render.Renderer;
-import ratpack.render.RendererSupport;
-import ratpack.util.Types;
+import ratpack.core.handling.Context;
+import ratpack.core.http.internal.HttpHeaderConstants;
+import ratpack.core.render.Renderer;
+import ratpack.core.render.RendererSupport;
+import ratpack.func.Types;
 
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;

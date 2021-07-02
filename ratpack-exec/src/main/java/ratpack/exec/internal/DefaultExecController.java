@@ -25,9 +25,9 @@ import org.slf4j.LoggerFactory;
 import ratpack.exec.*;
 import ratpack.func.Action;
 import ratpack.func.Block;
-import ratpack.registry.RegistrySpec;
-import ratpack.util.internal.InternalRatpackError;
-import ratpack.util.internal.TransportDetector;
+import ratpack.exec.registry.RegistrySpec;
+import ratpack.exec.util.internal.InternalRatpackError;
+import ratpack.exec.util.internal.TransportDetector;
 
 import java.util.Queue;
 import java.util.concurrent.*;

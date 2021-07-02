@@ -16,10 +16,12 @@
 
 package ratpack.test.mock;
 
-import ratpack.server.RatpackServer;
+import ratpack.core.handling.Handler;
+import ratpack.core.http.Request;
+import ratpack.core.server.RatpackServer;
 import ratpack.test.embed.EmbeddedApp;
 import ratpack.test.handling.HandlerFactory;
-import ratpack.util.Exceptions;
+import ratpack.func.Exceptions;
 
 /**
  * A test harness for simulating behavior of remote APIs by starting an {@link EmbeddedApp} that will
@@ -28,8 +30,8 @@ import ratpack.util.Exceptions;
  * {@link MockApi} provides functionality similar to <a href="http://wiremock.org/" target="_blank">WireMock</a> and
  * <a href="https://betamax.readthedocs.io/en/latest/index.html" target="_blank">BetaMax</a>.
  * <pre class="java">{@code
- * import ratpack.http.HttpMethod;
- * import ratpack.http.client.HttpClient;
+ * import ratpack.core.http.HttpMethod;
+ * import ratpack.core.http.client.HttpClient;
  * import ratpack.test.embed.EmbeddedApp;
  * import ratpack.test.handling.HandlerFactory;
  * import ratpack.test.mock.MockApi;
@@ -74,12 +76,12 @@ import ratpack.util.Exceptions;
  * {@link MockApi} is particularly powerful when combined with
  * Spock's {@code Mock} API by providing a Mock {@link HandlerFactory}
  * to this class. Interactions to a remote API can then be
- * validated inline to the {@link spock.lang.Specification} by
+ * validated inline to the specification by
  * verifying the invocations of the mock {@code HandlerFactory}.
  * <pre class="groovy">{@code
  * import ratpack.groovy.test.embed.GroovyEmbeddedApp
- * import ratpack.http.HttpMethod
- * import ratpack.http.client.HttpClient
+ * import ratpack.core.http.HttpMethod
+ * import ratpack.core.http.client.HttpClient
  * import spock.lang.Specification
  *
  * import static ratpack.groovy.Groovy.groovyHandler
@@ -104,8 +106,8 @@ import ratpack.util.Exceptions;
  *     def resp = app.httpClient.get()
  *
  *     then:
- *     1 * remoteApi.handlerFactory.receive({
- *       it.method == HttMethod.GET
+ *     1 * remoteApi.handlerFactory.receive {
+ *       it.method == HttpMethod.GET
  *       it.path == ""
  *     } >> groovyHandler {
  *       render("remote ok")
@@ -148,7 +150,7 @@ public class MockApi implements EmbeddedApp {
 
   /**
    * Creates an embedded Ratpack server which delegates handling to the provided factory.
-   * @param factory a factory that generates a {@link ratpack.handling.Handler} based on the incoming {@link ratpack.http.Request}
+   * @param factory a factory that generates a {@link Handler} based on the incoming {@link Request}
    * @return an embedded Ratpack app which delegates all requests to the provided factory.
    * @see EmbeddedApp
    */

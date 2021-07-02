@@ -13,7 +13,7 @@ The first requirement is to apply the Gradle plugin to your Gradle project…
 ```language-groovy gradle
 buildscript {
   repositories {
-    jcenter()
+    mavenCentral()
   }
   dependencies {
     classpath "io.ratpack:ratpack-gradle:@ratpack-version@"
@@ -23,7 +23,7 @@ buildscript {
 apply plugin: "io.ratpack.ratpack-java"
 
 repositories {
-  jcenter()
+  mavenCentral()
 }
 ```
 
@@ -32,7 +32,7 @@ Or for a Groovy based Ratpack project…
 ```language-groovy gradle
 buildscript {
   repositories {
-    jcenter()
+    mavenCentral()
   }
   dependencies {
     classpath "io.ratpack:ratpack-gradle:@ratpack-version@"
@@ -42,7 +42,7 @@ buildscript {
 apply plugin: "io.ratpack.ratpack-groovy"
 
 repositories {
-  jcenter()
+  mavenCentral()
 }
 ```
 
@@ -58,7 +58,7 @@ To depend on a Ratpack extension library, simply add it as a regular compile dep
 ```language-groovy gradle
 buildscript {
   repositories {
-    jcenter()
+    mavenCentral()
   }
   dependencies {
     classpath "io.ratpack:ratpack-gradle:@ratpack-version@"
@@ -68,7 +68,7 @@ buildscript {
 apply plugin: "io.ratpack.ratpack-groovy"
 
 repositories {
-  jcenter()
+  mavenCentral()
 }
 
 dependencies {
@@ -89,8 +89,8 @@ The `'io.ratpack.ratpack-groovy'` plugin adds the following implicit dependencie
 * `ratpack-groovy` - _compile_ (depends on `ratpack-core`)
 * `ratpack-groovy-test` - _testCompile_ (depends on `ratpack-test`)
 
-The available libraries can be [browsed via Bintray](https://bintray.com/ratpack/maven/ratpack/view/files/io/ratpack).
-All Ratpack jars are published to both [Bintray's JCenter](https://bintray.com/bintray/jcenter) and [Maven Central](http://search.maven.org).
+The available libraries can be [browsed via search.maven.org](https://search.maven.org/search?q=g:io.ratpack).
+All Ratpack jars are published to [Maven Central](http://search.maven.org).
 
 ## The 'application' plugin
 
@@ -116,6 +116,7 @@ To use the `'shadow'` integration, you will need to include the dependency in yo
 ```language-groovy gradle
 buildscript {
   repositories {
+    mavenCentral()
     jcenter()
   }
   dependencies {
@@ -128,7 +129,7 @@ apply plugin: "io.ratpack.ratpack-java"
 apply plugin: 'com.github.johnrengelman.shadow'
 
 repositories {
-  jcenter()
+  mavenCentral()
 }
 ```
 
@@ -150,7 +151,7 @@ You can choose not to use this dir, using `src/main/resources` instead, or chang
 ```language-groovy gradle
 buildscript {
   repositories {
-    jcenter()
+    mavenCentral()
   }
   dependencies {
     classpath "io.ratpack:ratpack-gradle:@ratpack-version@"
@@ -160,7 +161,7 @@ buildscript {
 apply plugin: "io.ratpack.ratpack-groovy"
 
 repositories {
-  jcenter()
+  mavenCentral()
 }
 
 ratpack.baseDir = file('ratpack')
@@ -193,7 +194,7 @@ If you wish to set extra system properties for development time execution, you c
 ```language-groovy gradle
 buildscript {
   repositories {
-    jcenter()
+    mavenCentral()
   }
   dependencies {
     classpath "io.ratpack:ratpack-gradle:@ratpack-version@"
@@ -203,7 +204,7 @@ buildscript {
 apply plugin: "io.ratpack.ratpack-java"
 
 repositories {
-  jcenter()
+  mavenCentral()
 }
 
 run {
@@ -231,6 +232,7 @@ Extra system properties or JVM options can be configured on this task…
 ```language-groovy gradle
 buildscript {
   repositories {
+    mavenCentral()
     jcenter()
   }
   dependencies {
@@ -243,7 +245,7 @@ apply plugin: "io.ratpack.ratpack-java"
 apply plugin: "com.github.johnrengelman.shadow"
 
 repositories {
-  jcenter()
+  mavenCentral()
 }
 
 runShadow {

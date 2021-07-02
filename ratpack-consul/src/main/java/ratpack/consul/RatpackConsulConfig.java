@@ -19,12 +19,13 @@ package ratpack.consul;
 import com.google.common.io.ByteSource;
 import com.orbitz.consul.Consul;
 import com.orbitz.consul.option.QueryOptions;
+import ratpack.core.server.ServerConfigBuilder;
 import ratpack.func.Action;
-import ratpack.util.Exceptions;
+import ratpack.func.Exceptions;
 
 /**
  * Integration for retrieving values from a <a href="https://www.consul.io/">Consul</a> Key-Value store as {@link com.google.common.io.ByteSource} to be used
- * with the existing {@link ratpack.server.ServerConfigBuilder} parsing options.
+ * with the existing {@link ServerConfigBuilder} parsing options.
  * @since 1.5
  */
 public interface RatpackConsulConfig {
@@ -66,7 +67,7 @@ public interface RatpackConsulConfig {
 
   /**
    * Read the specified key as a {@link ByteSource} using the specified configuration to connection to Consul and the provided {@link QueryOptions}.
-   * The returned value can then be passed to the existing parsing options in {@link ratpack.server.ServerConfigBuilder} to provide configuration.
+   * The returned value can then be passed to the existing parsing options in {@link ServerConfigBuilder} to provide configuration.
    * <p>
    * <pre class="java-args">{@code
    * import ratpack.consul.RatpackConsulConfig;
@@ -106,8 +107,8 @@ public interface RatpackConsulConfig {
         clientConfig.with(Consul.builder()).build()
           .keyValueClient()
           .getValue(key, queryOptions)
-          .transform(v -> v.getValueAsString().or(""))
-          .or("").getBytes()
+          .map(v -> v.getValueAsString().orElse(""))
+          .orElse("").getBytes()
       )
     );
   }

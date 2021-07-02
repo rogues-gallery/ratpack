@@ -20,14 +20,12 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
 import ratpack.exec.*;
 import ratpack.func.Action;
-import ratpack.reactor.internal.BlockingExecutorBackedScheduler;
-import ratpack.reactor.internal.DefaultSchedulers;
-import ratpack.reactor.internal.ErrorHandler;
-import ratpack.reactor.internal.ExecControllerBackedScheduler;
-import ratpack.registry.RegistrySpec;
-import ratpack.stream.Streams;
-import ratpack.stream.TransformablePublisher;
-import ratpack.util.Exceptions;
+import ratpack.func.Function;
+import ratpack.reactor.internal.*;
+import ratpack.exec.registry.RegistrySpec;
+import ratpack.exec.stream.Streams;
+import ratpack.exec.stream.TransformablePublisher;
+import ratpack.func.Exceptions;
 import reactor.core.CoreSubscriber;
 import reactor.core.Scannable;
 import reactor.core.publisher.Flux;
@@ -65,7 +63,7 @@ public abstract class ReactorRatpack {
    * <p>
    * For a Java application, a convenient place to call this is in the handler factory implementation.
    * <pre class="java">{@code
-   * import ratpack.error.ServerErrorHandler;
+   * import ratpack.core.error.ServerErrorHandler;
    * import ratpack.reactor.ReactorRatpack;
    * import ratpack.test.embed.EmbeddedApp;
    * import rx.Observable;
@@ -89,9 +87,8 @@ public abstract class ReactorRatpack {
    * }
    * }</pre>
    */
-  @SuppressWarnings("unchecked")
   public static void initialize() {
-    Hooks.onOperatorError(new ErrorHandler());
+    Hooks.onLastOperator(ErrorForwarding::decorate);
   }
 
   /**
@@ -131,7 +128,7 @@ public abstract class ReactorRatpack {
    * <p>
    * The returned observable emits the promise's single value if it succeeds, and emits the error (i.e. via {@code onError()}) if it fails.
    * <p>
-   * This method works well as a method reference to the {@link Promise#to(ratpack.func.Function)} method.
+   * This method works well as a method reference to the {@link Promise#to(Function)} method.
    * <pre class="java">{@code
    * import ratpack.reactor.ReactorRatpack;
    * import ratpack.exec.Promise;
@@ -155,7 +152,7 @@ public abstract class ReactorRatpack {
    * }</pre>
    *
    * @param promise the promise
-   * @param <T>     the type of value promised
+   * @param <T> the type of value promised
    * @return an observable for the promised value
    */
   public static <T> Flux<T> flux(Promise<T> promise) {
@@ -198,8 +195,8 @@ public abstract class ReactorRatpack {
    * }</pre>
    *
    * @param promise the promise
-   * @param <T>     the element type of the promised iterable
-   * @param <I>     the type of iterable
+   * @param <T> the element type of the promised iterable
+   * @param <I> the type of iterable
    * @return an observable for each element of the promised iterable
    * @see #flux(ratpack.exec.Promise)
    */
@@ -212,7 +209,7 @@ public abstract class ReactorRatpack {
    * <p>
    * The returned Single emits the promise's single value if it succeeds, and emits the error (i.e. via {@code onError()}) if it fails.
    * <p>
-   * This method works well as a method reference to the {@link Promise#to(ratpack.func.Function)} method.
+   * This method works well as a method reference to the {@link Promise#to(Function)} method.
    * <pre class="java">{@code
    * import ratpack.reactor.ReactorRatpack;
    * import ratpack.exec.Promise;
@@ -236,7 +233,7 @@ public abstract class ReactorRatpack {
    * }</pre>
    *
    * @param promise the promise
-   * @param <T>     the type of value promised
+   * @param <T> the type of value promised
    * @return a single for the promised value
    */
   public static <T> Mono<T> mono(Promise<T> promise) {
@@ -291,7 +288,7 @@ public abstract class ReactorRatpack {
    * This method must be called during an execution.
    *
    * @param flux the flux
-   * @param <T>        the type of the value observed
+   * @param <T> the type of the value observed
    * @return a promise that returns all values from the observable
    * @throws UnmanagedThreadException if called outside of an execution
    * @see #promiseSingle(Mono)
@@ -359,7 +356,7 @@ public abstract class ReactorRatpack {
    * This method must be called during an execution.
    *
    * @param mono the mono
-   * @param <T>        the type of the value observed
+   * @param <T> the type of the value observed
    * @return a promise that returns the sole value from the observable
    * @see #promise(Flux)
    */
@@ -374,7 +371,7 @@ public abstract class ReactorRatpack {
    * <p>
    * <pre class="java">{@code
    * import ratpack.reactor.ReactorRatpack;
-   * import ratpack.stream.Streams;
+   * import ratpack.exec.stream.Streams;
    * import ratpack.test.exec.ExecHarness;
    * import reactor.core.publisher.Flux;
    * import java.util.List;
@@ -402,7 +399,7 @@ public abstract class ReactorRatpack {
    * }</pre>
    *
    * @param flux the flux
-   * @param <T>        the type of the value observed
+   * @param <T> the type of the value observed
    * @return a ReactiveStreams publisher containing each value of the flux
    */
   public static <T> TransformablePublisher<T> publisher(Flux<T> flux) {
@@ -444,7 +441,7 @@ public abstract class ReactorRatpack {
    * <p>
    *
    * @param source the observable source
-   * @param <T>    the type of item observed
+   * @param <T> the type of item observed
    * @return an observable stream equivalent to the given source
    * @see #fluxEach(Promise)
    * @see #promise(Flux)
@@ -504,7 +501,7 @@ public abstract class ReactorRatpack {
    * }</pre>
    *
    * @param observable the observable sequence to execute on a different compute thread
-   * @param <T>        the element type
+   * @param <T> the element type
    * @return an observable on the compute thread that <code>fork</code> was called from
    * @see #forkEach(Flux)
    * @since 1.4
@@ -522,7 +519,7 @@ public abstract class ReactorRatpack {
    * <p>
    * <pre class="java">{@code
    * import ratpack.exec.Execution;
-   * import ratpack.registry.RegistrySpec;
+   * import ratpack.exec.registry.RegistrySpec;
    * import ratpack.reactor.ReactorRatpack;
    * import ratpack.test.exec.ExecHarness;
    * <p>
@@ -554,9 +551,9 @@ public abstract class ReactorRatpack {
    * }
    * }</pre>
    *
-   * @param flux         the flux sequence to execute on a different compute thread
+   * @param flux the flux sequence to execute on a different compute thread
    * @param doWithRegistrySpec an Action where objects can be inserted into the registry of the forked execution
-   * @param <T>                the element type
+   * @param <T> the element type
    * @return an observable on the compute thread that <code>fork</code> was called from
    * @throws Exception
    * @see #fork(Flux)
@@ -572,7 +569,7 @@ public abstract class ReactorRatpack {
    * <p>
    * <pre class="java">{@code
    * import ratpack.reactor.ReactorRatpack;
-   * import ratpack.util.Exceptions;
+   * import ratpack.func.Exceptions;
    * import ratpack.test.exec.ExecHarness;
    * <p>
    * import reactor.core.publisher.Flux;
@@ -612,7 +609,7 @@ public abstract class ReactorRatpack {
    * }</pre>
    *
    * @param flux the observable sequence to process each element of in a forked execution
-   * @param <T>        the element type
+   * @param <T> the element type
    * @return an observable
    */
   public static <T> Flux<T> forkEach(Flux<T> flux) {
@@ -626,9 +623,9 @@ public abstract class ReactorRatpack {
    * <p>
    * You do not have access to the original execution inside the {@link Action}.
    *
-   * @param flux         the flux sequence to process each element of in a forked execution
+   * @param flux the flux sequence to process each element of in a forked execution
    * @param doWithRegistrySpec an Action where objects can be inserted into the registry of the forked execution
-   * @param <T>                the element type
+   * @param <T> the element type
    * @return an observable
    * @see #forkEach(Flux)
    * @see #fork(Flux, Action)

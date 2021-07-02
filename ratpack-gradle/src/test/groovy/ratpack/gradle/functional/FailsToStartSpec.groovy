@@ -23,14 +23,14 @@ class FailsToStartSpec extends FunctionalSpec {
   def "process does not hang if it fails to start"() {
     when:
     buildFile << """
-      configureRun.doLast { run.systemProperty "ratpack.development", false }
+      run.systemProperty "ratpack.development", false
       mainClassName = "org.Main"
     """
 
     file("src/main/java/org/Main.java") << """
       package org;
 
-      import ratpack.server.*;
+      import ratpack.core.server.*;
 
       public class Main {
         public static void main(String... args) throws Exception {

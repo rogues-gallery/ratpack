@@ -22,26 +22,26 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.util.CharsetUtil;
-import org.reactivestreams.Subscriber;
+import org.reactivestreams.Publisher;
 import org.slf4j.LoggerFactory;
-import ratpack.api.Nullable;
+import ratpack.core.http.internal.*;
+import ratpack.func.Nullable;
 import ratpack.exec.ExecController;
-import ratpack.file.internal.ResponseTransmitter;
+import ratpack.core.file.internal.ResponseTransmitter;
 import ratpack.func.Action;
-import ratpack.handling.Context;
-import ratpack.handling.Handler;
-import ratpack.handling.RequestOutcome;
-import ratpack.handling.internal.ChainHandler;
-import ratpack.handling.internal.DefaultContext;
-import ratpack.handling.internal.DefaultRequestOutcome;
-import ratpack.http.Headers;
-import ratpack.http.MutableHeaders;
-import ratpack.http.Response;
-import ratpack.http.Status;
-import ratpack.http.internal.*;
-import ratpack.registry.Registry;
-import ratpack.render.internal.RenderController;
-import ratpack.server.Stopper;
+import ratpack.core.handling.Context;
+import ratpack.core.handling.Handler;
+import ratpack.core.handling.RequestOutcome;
+import ratpack.core.handling.internal.ChainHandler;
+import ratpack.core.handling.internal.DefaultContext;
+import ratpack.core.handling.internal.DefaultRequestOutcome;
+import ratpack.core.http.Headers;
+import ratpack.core.http.MutableHeaders;
+import ratpack.core.http.Response;
+import ratpack.core.http.Status;
+import ratpack.exec.registry.Registry;
+import ratpack.core.render.internal.RenderController;
+import ratpack.core.server.Stopper;
 import ratpack.test.handling.HandlerExceptionNotThrownException;
 import ratpack.test.handling.HandlerTimeoutException;
 import ratpack.test.handling.HandlingResult;
@@ -55,7 +55,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static ratpack.util.Exceptions.uncheck;
+import static ratpack.func.Exceptions.uncheck;
 
 public class DefaultHandlingResult implements HandlingResult {
 
@@ -116,7 +116,7 @@ public class DefaultHandlingResult implements HandlingResult {
       }
 
       @Override
-      public Subscriber<ByteBuf> transmitter(HttpResponseStatus status) {
+      public void transmit(HttpResponseStatus status, Publisher<? extends ByteBuf> publisher) {
         throw new UnsupportedOperationException("streaming not supported while unit testing");
       }
 

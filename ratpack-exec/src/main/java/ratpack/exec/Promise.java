@@ -16,22 +16,14 @@
 
 package ratpack.exec;
 
-import ratpack.api.NonBlocking;
+import ratpack.exec.api.NonBlocking;
 import ratpack.exec.internal.CachingUpstream;
 import ratpack.exec.internal.DefaultExecution;
 import ratpack.exec.internal.DefaultPromise;
 import ratpack.exec.util.Promised;
 import ratpack.exec.util.retry.RetryPolicy;
-
-import ratpack.func.Action;
-import ratpack.func.BiAction;
-import ratpack.func.BiFunction;
-import ratpack.func.Block;
-import ratpack.func.Factory;
-import ratpack.func.Function;
-import ratpack.func.Pair;
-import ratpack.func.Predicate;
-import ratpack.util.Exceptions;
+import ratpack.func.*;
+import ratpack.func.Exceptions;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -181,23 +173,6 @@ public interface Promise<T> {
   }
 
   /**
-   * Deprecated. Use {@link #flatten(Factory)}.
-   *
-   * @param factory deprecated.
-   * @param <T> the type of promised value
-   * @return deprecated.
-   * @deprecated since 1.5, replaced by {@link #flatten(Factory)}.
-   */
-  @Deprecated
-  static <T> Promise<T> wrap(Factory<? extends Promise<T>> factory) {
-    try {
-      return factory.create();
-    } catch (Exception e) {
-      return Promise.error(e);
-    }
-  }
-
-  /**
    * Creates a promise for the given item.
    * <p>
    * The given item will be used every time that the value is requested.
@@ -281,32 +256,6 @@ public interface Promise<T> {
   }
 
   /**
-   * Deprecated.
-   *
-   * @param upstream the producer of the value
-   * @param <T> the type of promised value
-   * @return a promise for the asynchronously created value
-   * @deprecated replaced by {@link #async(Upstream)}
-   */
-  @Deprecated
-  static <T> Promise<T> of(Upstream<T> upstream) {
-    return async(upstream);
-  }
-
-  /**
-   * Deprecated.
-   *
-   * @param factory the producer of the value
-   * @param <T> the type of promised value
-   * @return a promise for the result of the factory
-   * @deprecated replaced by {@link #sync(Factory)}}
-   */
-  @Deprecated
-  static <T> Promise<T> ofLazy(Factory<T> factory) {
-    return sync(factory);
-  }
-
-  /**
    * Specifies what should be done with the promised object when it becomes available.
    * <p>
    * <b>Important:</b> this method can only be used from a Ratpack managed compute thread.
@@ -380,20 +329,30 @@ public interface Promise<T> {
    * @return A promise for the successful result
    * @since 1.1
    */
-  default Promise<T> onError(Predicate<? super Throwable> predicate, Action<? super Throwable> errorHandler) {
+  default Promise<T> onError(Predicate<? super Throwable> predicate, @NonBlocking Action<? super Throwable> errorHandler) {
     return transform(up -> down ->
-      up.connect(down.onError(throwable -> {
+      Promise.async(up).connect(down.onError(throwable -> {
         if (predicate.apply(throwable)) {
-          try {
+          Promise.<Void>sync(() -> {
             errorHandler.execute(throwable);
-          } catch (Throwable e) {
-            if (e != throwable) {
-              e.addSuppressed(throwable);
-            }
-            down.error(e);
-            return;
-          }
-          down.complete();
+            return null;
+          })
+            .connect(new Downstream<Void>() {
+              @Override
+              public void success(Void value) {
+                down.complete();
+              }
+
+              @Override
+              public void error(Throwable e) {
+                down.error(e);
+              }
+
+              @Override
+              public void complete() {
+                down.complete();
+              }
+            });
         } else {
           down.error(throwable);
         }
@@ -405,7 +364,7 @@ public interface Promise<T> {
    * Specifies the action to take if the an error of the given type occurs trying to produce the promised value.
    *
    * <pre class="java">{@code
-   * import ratpack.http.TypedData;
+   * import ratpack.core.http.TypedData;
    * import ratpack.test.embed.EmbeddedApp;
    *
    * import static org.junit.Assert.assertEquals;
@@ -447,7 +406,7 @@ public interface Promise<T> {
   }
 
   /**
-   * Specifies the action to take if the an error occurs trying to produce the promised value.
+   * Specifies the action to take if an error occurs trying to produce the promised value.
    * <p>
    * If the given action throws an exception, the original exception will be rethrown with the exception thrown
    * by the action added to the suppressed exceptions list.
@@ -627,21 +586,6 @@ public interface Promise<T> {
    */
   default Promise<T> blockingOp(Action<? super T> action) {
     return flatMap(t -> Blocking.op(action.curry(t)).map(() -> t));
-  }
-
-  /**
-   * Deprecated.
-   * <p>
-   * Use {@link #replace(Promise)}.
-   *
-   * @param next the promise to replace {@code this} with
-   * @param <O> the type of value provided by the replacement promise
-   * @return a promise
-   * @deprecated replaced by {@link #replace(Promise)} as of 1.1.0
-   */
-  @Deprecated
-  default <O> Promise<O> next(Promise<O> next) {
-    return flatMap(in -> next);
   }
 
   /**
@@ -828,7 +772,7 @@ public interface Promise<T> {
    * <p>
    * If the upstream promise fails, its error will propagate downstream and the given promise will never be subscribed to.
    *
-   *  <pre class="java">{@code
+   * <pre class="java">{@code
    * import ratpack.test.exec.ExecHarness;
    * import ratpack.exec.ExecResult;
    * import ratpack.exec.Promise;
@@ -1458,7 +1402,7 @@ public interface Promise<T> {
    *     List<Integer> routed = Lists.newLinkedList();
    *
    *     ExecResult<Integer> result1 = yield(1, routed);
-   *     assertEquals(new Integer(1), result1.getValue());
+   *     assertEquals(Integer.valueOf(1), result1.getValue());
    *     assertFalse(result1.isComplete()); // false because promise returned a value before the execution completed
    *     assertTrue(routed.isEmpty());
    *
@@ -1476,7 +1420,7 @@ public interface Promise<T> {
    * It can be useful at the handler layer to provide common validation.
    * <pre class="java">{@code
    * import ratpack.exec.Promise;
-   * import ratpack.handling.Context;
+   * import ratpack.core.handling.Context;
    * import ratpack.test.embed.EmbeddedApp;
    *
    * import static org.junit.Assert.assertEquals;
@@ -1769,10 +1713,10 @@ public interface Promise<T> {
    *
    * @param cacheFor a function that determines how long to cache the given result for
    * @return a caching promise
-   * @since 1.5
    * @see #cache()
    * @see #cacheIf(Predicate)
    * @see #cacheResultIf(Predicate)
+   * @since 1.5
    */
   default Promise<T> cacheResultFor(Function<? super ExecResult<T>, Duration> cacheFor) {
     return transform(up -> new CachingUpstream<>(up, cacheFor));
@@ -1911,7 +1855,8 @@ public interface Promise<T> {
           try {
             listener.execute(Result.error(throwable));
           } catch (Exception e) {
-            throwable.addSuppressed(e);
+            down.error(e);
+            return;
           }
           down.error(throwable);
         }
@@ -2049,8 +1994,8 @@ public interface Promise<T> {
    * This method is then called on the returned promise to cleanup the resource.
    *
    * @param closeable the closeable to close
-   * @see #close(Operation)
    * @return a promise
+   * @see #close(Operation)
    * @since 1.3
    */
   default Promise<T> close(AutoCloseable closeable) {
@@ -2071,8 +2016,8 @@ public interface Promise<T> {
         public void error(Throwable throwable) {
           try {
             closeable.close();
-          } catch (Exception e) {
-            throwable.addSuppressed(e);
+          } catch (Exception closerThrowable) {
+            throwable.addSuppressed(closerThrowable);
           }
           down.error(throwable);
         }
@@ -2130,9 +2075,9 @@ public interface Promise<T> {
             }
 
             @Override
-            public void error(Throwable innerThrowable) {
-              innerThrowable.addSuppressed(throwable);
-              down.error(innerThrowable);
+            public void error(Throwable closerThrowable) {
+              throwable.addSuppressed(closerThrowable);
+              down.error(throwable);
             }
 
             @Override
@@ -2174,9 +2119,9 @@ public interface Promise<T> {
    * If the promise succeeds and this method throws an exception, the thrown exception will propagate.
    *
    * @param action a callback for the time
-   * @since 1.3
-   * @see #timeResult(BiAction)
    * @return effectively {@code this}
+   * @see #timeResult(BiAction)
+   * @since 1.3
    */
   default Promise<T> time(Action<? super Duration> action) {
     return timeResult((r, d) -> action.execute(d));
@@ -2191,9 +2136,9 @@ public interface Promise<T> {
    * If the promise succeeds and this method throws an exception, the thrown exception will propagate.
    *
    * @param action a callback for the time
-   * @since 1.5
-   * @see #time(Action)
    * @return effectively {@code this}
+   * @see #time(Action)
+   * @since 1.5
    */
   default Promise<T> timeResult(BiAction<? super ExecResult<T>, ? super Duration> action) {
     return around(System::nanoTime, (start, result) -> {
@@ -2244,9 +2189,6 @@ public interface Promise<T> {
           try {
             newResult = after.apply(start, originalResult);
           } catch (Throwable t) {
-            if (originalResult.isError() && originalResult.getThrowable() != t) {
-              t.addSuppressed(originalResult.getThrowable());
-            }
             down.error(t);
             return;
           }
@@ -2339,48 +2281,11 @@ public interface Promise<T> {
    * This method delegates to {@link #fork(Action)} with {@link Action#noop()}.
    *
    * @return a promise
-   * @since 1.4
    * @see #fork(Action)
+   * @since 1.4
    */
   default Promise<T> fork() {
     return Exceptions.uncheck(() -> fork(Action.noop()));
-  }
-
-  /**
-   * Causes {@code this} yielding the promised value to be retried on error, after a fixed delay.
-   *
-   * @param maxAttempts the maximum number of times to retry
-   * @param delay the duration to wait between retry attempts
-   * @param onError the error handler
-   * @return a promise with a retry error handler
-   * @see #retry(int, BiFunction)
-   * @since 1.5
-   * @deprecated since 1.7, use {@link #retry(RetryPolicy, BiAction)}
-   */
-  @Deprecated
-  default Promise<T> retry(int maxAttempts, Duration delay, @NonBlocking BiAction<? super Integer, ? super Throwable> onError) {
-    Promise<Duration> delayPromise = Promise.value(delay);
-    return retry(maxAttempts, (i, error) ->
-      Operation.of(() ->
-        onError.execute(i, error)
-      )
-        .flatMap(delayPromise)
-    );
-  }
-
-  /**
-   * Causes {@code this} yielding the promised value to be retried on error, after a calculated delay.
-   *
-   * @param maxAttempts the maximum number of times to retry
-   * @param onError the error handler
-   * @return a promise with a retry error handler
-   * @see #retry(int, Duration, BiAction)
-   * @since 1.5
-   * @deprecated since 1.7, use {@link #retry(RetryPolicy, BiAction)}
-   */
-  @Deprecated
-  default Promise<T> retry(int maxAttempts, BiFunction<? super Integer, ? super Throwable, Promise<Duration>> onError) {
-    return transform(up -> down -> DefaultPromise.retryAttempt(1, maxAttempts, up, down, onError));
   }
 
   /**
@@ -2443,12 +2348,78 @@ public interface Promise<T> {
    * @since 1.7
    */
   default Promise<T> retry(RetryPolicy retryPolicy, BiAction<? super Integer, ? super Throwable> onError) {
-    return transform(up -> down -> DefaultPromise.retry(retryPolicy, up, down, onError));
+    return retryIf(Predicate.alwaysTrue(), retryPolicy, onError);
+  }
+
+  /**
+   * Causes {@code this} yielding the promised value to be retried on error, under the rules of provided {@code retryPolicy},
+   * and if the given {@link Predicate} matches the error thrown.
+   * <p>
+   * The given function is invoked for each failure,
+   * with the sequence number of the failure as the first argument and the failure exception as the second.
+   * This may be used to log or collect exceptions.
+   * If all errors are to be ignored, use {@link BiAction#noop()}.
+   * <p>
+   * Any exception thrown by the function – possibly the exception it receives as an argument – will
+   * be propagated to the subscriber, yielding a failure.
+   * This can be used to selectively retry on certain failures, but immediately fail on others.
+   * <p>
+   * If the promise exhausts the {@code retryPolicy},
+   * the given function will not be invoked and the most recent exception will propagate.
+   * <p>
+   *
+   * <pre class="java">{@code
+   * import ratpack.exec.ExecResult;
+   * import ratpack.exec.Promise;
+   * import ratpack.exec.util.retry.AttemptRetryPolicy;
+   * import ratpack.exec.util.retry.RetryPolicy;
+   * import ratpack.exec.util.retry.FixedDelay;
+   * import ratpack.test.exec.ExecHarness;
+   *
+   * import java.time.Duration;
+   * import java.util.Arrays;
+   * import java.util.LinkedList;
+   * import java.util.List;
+   * import java.util.concurrent.atomic.AtomicInteger;
+   *
+   * import static org.junit.Assert.assertEquals;
+   *
+   * public class Example {
+   *   private static final List<String> LOG = new LinkedList<>();
+   *
+   *   public static void main(String... args) throws Exception {
+   *     AtomicInteger source = new AtomicInteger();
+   *
+   *     RetryPolicy retryPolicy = AttemptRetryPolicy.of(b -> b
+   *       .delay(FixedDelay.of(Duration.ofMillis(500)))
+   *       .maxAttempts(3));
+   *
+   *     ExecResult<Integer> result = ExecHarness.yieldSingle(exec ->
+   *       Promise.sync(source::incrementAndGet)
+   *         .mapIf(i -> i < 3, i -> { throw new IllegalStateException(); })
+   *         .retryIf(t -> t instanceof IllegalStateException, retryPolicy, (i, t) -> LOG.add("retry attempt: " + i))
+   *     );
+   *
+   *     assertEquals(Integer.valueOf(3), result.getValue());
+   *     assertEquals(Arrays.asList("retry attempt: 1", "retry attempt: 2"), LOG);
+   *   }
+   * }
+   * }</pre>
+   *
+   * @param predicate the predicate against which thrown errors are matched. If the predicate succeeds, the retry is allowed to execute
+   * @param retryPolicy policy to govern this retry behaviour
+   * @param onError the error handler
+   * @return a promise with a retry error handler
+   * @since 1.8
+   */
+  default Promise<T> retryIf(Predicate<? super Throwable> predicate, RetryPolicy retryPolicy, BiAction<? super Integer, ? super Throwable> onError) {
+    return transform(up -> down -> DefaultPromise.retry(predicate, retryPolicy, up, down, onError));
   }
 
   /**
    * Convert this promise into a {@link CompletableFuture}.
    * <p>
+   *
    * @return a {@link CompletableFuture} that will complete successfully or exceptionally on the current execution thread.
    * @since 1.6
    */
@@ -2459,8 +2430,31 @@ public interface Promise<T> {
   }
 
   /**
+   * Specifies the action to take if the {@link Upstream} signals complete without emitting a value or an error.
+   * <p>
+   * If the given action throws an exception, the exception will be propagated to the Promise's {@link #onError}
+   * method.
+   *
+   * @param block the action to take if {@link Upstream} signals {@code complete}
+   * @return a promise with an action to execute on complete
+   * @since 1.8
+   */
+  default Promise<T> onComplete(Block block) {
+    return transform(up -> down ->
+      up.connect(down.onComplete(() -> {
+        try {
+          block.execute();
+        } catch (Throwable e) {
+          down.error(e);
+        }
+      }))
+    );
+  }
+
+  /**
    * Convert a {@link CompletableFuture} into a promise.
    * <p>
+   *
    * @param future the {@link CompletableFuture} to convert into a {@link Promise}
    * @param <T> The type of the promised value
    * @return a {@link Promise} that will be consumed on the current execution thread.

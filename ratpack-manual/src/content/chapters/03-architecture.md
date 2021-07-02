@@ -6,7 +6,7 @@ This chapter describes Ratpack applications at a high level.
 
 Ratpack is strongly typed.
 Beyond being implemented in Java, a strongly typed language, its API embraces types.
-For example, the notion of a [`Registry`](api/ratpack/registry/Registry.html) is used extensively in Ratpack.
+For example, the notion of a [`Registry`](api/ratpack/exec/registry/Registry.html) is used extensively in Ratpack.
 A `Registry` can be thought of as a map that uses types as keys.
 
 This may be of most interest to Ratpack users implementing their applications in Groovy.
@@ -65,8 +65,8 @@ When using the Guice integration, all of the objects known to Guice (typically t
 That is, handlers can retrieve them by type.
 
 To see why this is useful, we will use the requirement of rendering an object as JSON to the response.
-The “context” object given to a “handler” has a [render(Object)](api/ratpack/handling/Context.html#render-java.lang.Object-) method.
-The implementation of this method simply searches the context registry for an implementation of [`Renderer`](api/ratpack/render/Renderer.html)
+The “context” object given to a “handler” has a [render(Object)](api/ratpack/core/handling/Context.html#render%28java.lang.Object%29) method.
+The implementation of this method simply searches the context registry for an implementation of [`Renderer`](api/ratpack/core/render/Renderer.html)
 that can render objects of the given type. 
 Because objects available to Guice are available through the registry, they may be used for rendering.
 Therefore, adding a Guice module with a `Renderer` implementation for the desired type will allow it to be integrated into request processing.
@@ -74,7 +74,7 @@ This is no different in concept to plain dependency injection.
 
 While we have used the Guice integration in the above example, this approach is not tied to Guice (Guice is not part of Ratpack's core API).
 Another dependency injection container (such as Spring) could easily be used, or no container at all.
-Any source of objects can be adapted to Ratpack's [`Registry`](api/ratpack/registry/Registry.html) interface (there is also [a builder](api/ratpack/registry/RegistryBuilder.html)).
+Any source of objects can be adapted to Ratpack's [`Registry`](api/ratpack/exec/registry/Registry.html) interface (there is also [a builder](api/ratpack/exec/registry/RegistryBuilder.html)).
 
 ## Services & business logic
 
