@@ -2,7 +2,7 @@
 
 [Heroku][] is a scalable polyglot cloud application platform.
 It allows you to focus on writing applications in the language of your choice, and then easily deploy them to the cloud without having to manually manage servers, load balancing, log aggregation, etc.
-Heroku does not have, nor does it need, any special Ratpack support above its [generic support for JVM applications](http://java.heroku.com).
+Heroku does not have, nor does it need, any special Ratpack support above its [generic support for JVM applications](http://heroku.com/java).
 Heroku is a rich platform, with many [elements](https://elements.heroku.com/) such as Postgres, Redis, Memcache, RabbitMQ, New Relic, etc.
 It is a compelling option for serving Ratpack applications.
 
@@ -64,7 +64,7 @@ There are several ways to configure the environment for applications deployed to
 You may want to use these mechanisms to set environment variables and/or JVM system properties to configure your application.
 
 The application entry points that are used when using the `ratpack` and `ratpack-groovy` Gradle plugins support using
-JVM system properties to contribute to the [`ServerConfig`](api/ratpack/server/ServerConfig.html) (see the [launching chapter](launching.html) chapter for more detail).
+JVM system properties to contribute to the [`ServerConfig`](api/ratpack/core/server/ServerConfig.html) (see the [launching chapter](launching.html) chapter for more detail).
 The starter scripts created by the Ratpack Gradle plugins, support the standard `JAVA_OPTS` environment variable and an app specific `«PROJECT_NAME»_OPTS` environment variable.
 If your application name was `foo-Bar`, then the environment variable would be named `FOO_BAR_OPTS`.
 

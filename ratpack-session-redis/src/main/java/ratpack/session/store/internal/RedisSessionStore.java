@@ -17,11 +17,14 @@
 package ratpack.session.store.internal;
 
 import com.google.inject.Inject;
-import com.lambdaworks.redis.RedisURI;
-import com.lambdaworks.redis.api.async.RedisAsyncCommands;
+import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisURI;
+import io.lettuce.core.api.async.RedisAsyncCommands;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.util.AsciiString;
+import ratpack.core.service.StartEvent;
+import ratpack.core.service.StopEvent;
 import ratpack.exec.Execution;
 import ratpack.exec.Operation;
 import ratpack.exec.Promise;
@@ -32,7 +35,7 @@ public class RedisSessionStore implements SessionStore {
 
   private final RedisSessionModule.Config config;
 
-  private TimerExposingRedisClient redisClient;
+  private RedisClient redisClient;
   private RedisAsyncCommands<AsciiString, ByteBuf> connection;
 
   @Inject
@@ -87,16 +90,15 @@ public class RedisSessionStore implements SessionStore {
   }
 
   @Override
-  public void onStart(@SuppressWarnings("deprecation") ratpack.server.StartEvent event) throws Exception {
-    redisClient = new TimerExposingRedisClient(getRedisURI());
+  public void onStart(StartEvent event) throws Exception {
+    redisClient = RedisClient.create(getRedisURI());
     connection = redisClient.connect(new AsciiStringByteBufRedisCodec()).async();
   }
 
   @Override
-  public void onStop(@SuppressWarnings("deprecation") ratpack.server.StopEvent event) throws Exception {
+  public void onStop(StopEvent event) throws Exception {
     if (redisClient != null) {
       try {
-        redisClient.getTimer().stop();
         redisClient.shutdown();
       } finally {
         redisClient = null;
@@ -108,7 +110,7 @@ public class RedisSessionStore implements SessionStore {
     RedisURI.Builder builder = RedisURI.Builder.redis(config.getHost());
 
     if (config.getPassword() != null) {
-      builder.withPassword(config.getPassword());
+      builder.withPassword(config.getPassword().toCharArray());
     }
 
     if (config.getPort() != null) {

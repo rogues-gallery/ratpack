@@ -23,9 +23,9 @@ import ratpack.groovy.handling.GroovyChain
 import ratpack.groovy.internal.ClosureUtil
 import ratpack.guice.BindingsSpec
 import ratpack.guice.Guice
-import ratpack.server.RatpackServer
-import ratpack.server.ServerConfig
-import ratpack.server.ServerConfigBuilder
+import ratpack.core.server.RatpackServer
+import ratpack.core.server.ServerConfig
+import ratpack.core.server.ServerConfigBuilder
 import ratpack.test.embed.EmbeddedApp
 
 abstract class RatpackGroovyDslSpec extends EmbeddedBaseDirRatpackSpec {
@@ -37,7 +37,11 @@ abstract class RatpackGroovyDslSpec extends EmbeddedBaseDirRatpackSpec {
   protected Injector parentInjector
 
   @Delegate
-  final EmbeddedApp application = createApplication()
+  final EmbeddedApp internalApp = createApplication()
+
+  EmbeddedApp getApplication() {
+    return internalApp
+  }
 
   protected EmbeddedApp createApplication() {
     fromServer {

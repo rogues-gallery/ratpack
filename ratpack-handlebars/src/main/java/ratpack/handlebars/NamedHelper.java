@@ -33,7 +33,7 @@ import com.github.jknack.handlebars.Helper;
  * import java.nio.file.Path;
  *
  * import static ratpack.handlebars.Template.handlebarsTemplate;
- * import static org.junit.Assert.*;
+ * import static org.junit.jupiter.api.Assertions.*;
  *
  * public class Example {
  *
@@ -66,6 +66,8 @@ import com.github.jknack.handlebars.Helper;
  *   }
  * }
  * }</pre>
+ *
+ * @param <T> The context object type.
  */
 public interface NamedHelper<T> extends Helper<T> {
   String getName();

@@ -16,10 +16,10 @@
 
 package ratpack.groovy
 
-import ratpack.error.ServerErrorHandler
-import ratpack.error.internal.DefaultDevelopmentErrorHandler
+import ratpack.core.error.ServerErrorHandler
+import ratpack.core.error.internal.DefaultDevelopmentErrorHandler
 import ratpack.func.Action
-import ratpack.handling.Chain
+import ratpack.core.handling.Chain
 import ratpack.test.internal.RatpackGroovyDslSpec
 
 class GroovySpec extends RatpackGroovyDslSpec {
@@ -80,7 +80,8 @@ class GroovySpec extends RatpackGroovyDslSpec {
     }
 
     then:
-    text == "No response sent for GET request to / (last handler: closure at line 60 of GroovySpec.groovy)"
+    // Due to https://issues.apache.org/jira/browse/GROOVY-10520, the closure line number has moved to the closing }
+    text == "No response sent for GET request to / (last handler: closure at line 62 of GroovySpec.groovy)"
   }
 
 }

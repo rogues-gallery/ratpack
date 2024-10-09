@@ -21,7 +21,7 @@ import ratpack.exec.Operation;
 import ratpack.exec.Promise;
 import ratpack.exec.util.internal.DefaultSerialBatch;
 import ratpack.func.BiAction;
-import ratpack.stream.TransformablePublisher;
+import ratpack.exec.stream.TransformablePublisher;
 
 import java.util.Arrays;
 import java.util.List;

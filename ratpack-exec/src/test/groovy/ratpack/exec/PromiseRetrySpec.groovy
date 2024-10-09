@@ -47,77 +47,7 @@ class PromiseRetrySpec extends BaseExecutionSpec {
     .clock(clock)
   }
 
-  def "can retry failed promise and succeed (deprecated method)"() {
-    when:
-    def i = new AtomicInteger()
-
-    exec {
-      Promise.sync { i.incrementAndGet() }
-        .mapIf({ it < 3 }, { throw new IllegalStateException() })
-        .retry(3, { n, e -> events << "retry$n"; Promise.value(Duration.ofMillis(5 * n)) })
-        .then(events.&add)
-    }
-
-    then:
-    events == ["retry1", "retry2", 3, "complete"]
-  }
-
-  def "can retry failed promise and fail (deprecated method)"() {
-    when:
-    def e = new RuntimeException("!")
-
-    exec({
-      Promise.error(e)
-        .retry(3, { n, ex -> events << "retry$n"; Promise.value(Duration.ofMillis(5 * n)) })
-        .then { events << "then" }
-    }, events.&add)
-
-    then:
-    events == ["retry1", "retry2", "retry3", e, "complete"]
-  }
-
-  def "can retry failed promise with fixed delay and succeed (deprecated method)"() {
-    when:
-    def i = new AtomicInteger()
-
-    exec {
-      Promise.sync { i.incrementAndGet() }
-        .mapIf({ it < 3 }, { throw new IllegalStateException() })
-        .retry(3, Duration.ofMillis(5), { n, e -> events << "retry$n" })
-        .then(events.&add)
-    }
-
-    then:
-    events == ["retry1", "retry2", 3, "complete"]
-  }
-
-  def "can retry failed promise with fixed delay and fail (deprecated method)"() {
-    when:
-    def e = new RuntimeException("!")
-
-    exec({
-      Promise.error(e)
-        .retry(3, Duration.ofMillis(5), { n, ex -> events << "retry$n" })
-        .then { events << "then" }
-    }, events.&add)
-
-    then:
-    events == ["retry1", "retry2", "retry3", e, "complete"]
-  }
-
-  def "promise retry action is an execution segmen (deprecated method)t"() {
-    when:
-    def e = new RuntimeException("!")
-
-    exec({
-      Promise.error(e)
-        .retry(3, Duration.ofMillis(5), { n, ex -> Operation.of { events << "retry$n" }.then() })
-        .then { events << "then" }
-    }, events.&add)
-
-    then:
-    events == ["retry1", "retry2", "retry3", e, "complete"]
-  }
+  def predicate = { t -> t instanceof IOException }
 
   def "can retry failed promise until a number of attempts and succeed"() {
     when:
@@ -196,4 +126,50 @@ class PromiseRetrySpec extends BaseExecutionSpec {
     then:
     events == ["retry1", "retry2", "retry3", e, "complete"]
   }
+
+  def "can retry with an indexed delay failed promise if predicate matches until a number of attempts and succeed"() {
+    when:
+    def i = new AtomicInteger()
+
+    exec {
+      Promise.sync { i.incrementAndGet() }
+        .mapIf({ it < 3 }, { throw new IOException() })
+        .retryIf(predicate, attemptIndexedRetryStrategy, { n, e -> events << "retry$n" })
+        .then(events.&add)
+    }
+
+    then:
+    events == ["retry1", "retry2", 3, "complete"]
+  }
+
+  def "can retry failed promise if predicate matches until a number of attempts"() {
+    when:
+    def e = new IOException("!")
+
+    exec({
+      Promise.error(e)
+        .retryIf(predicate, attemptFixedRetryStrategy, { n, ex -> events << "retry$n" })
+        .then { events << "then" }
+    }, events.&add)
+
+    then:
+    events == ["retry1", "retry2", "retry3", e, "complete"]
+  }
+
+  def "do not retry failed promise if predicate does not match"() {
+    when:
+    def e = new NullPointerException("!")
+    def i = new AtomicInteger()
+
+    exec({
+      Promise.sync { i.incrementAndGet() }
+        .mapIf({ it < 3 }, { throw e })
+        .retryIf(predicate, attemptFixedRetryStrategy, { n, e1 -> events << "retry$n" })
+        .then(events.&add)
+    }, events.&add)
+
+    then:
+    events == [e, "complete"]
+  }
+
 }

@@ -29,18 +29,18 @@ import ratpack.guice.internal.DefaultBindingsSpec;
 import ratpack.guice.internal.GuiceUtil;
 import ratpack.guice.internal.InjectorRegistryBacking;
 import ratpack.guice.internal.RatpackBaseRegistryModule;
-import ratpack.handling.Chain;
-import ratpack.handling.Context;
-import ratpack.handling.Handler;
-import ratpack.impose.Impositions;
-import ratpack.registry.Registry;
-import ratpack.server.ServerConfig;
+import ratpack.core.handling.Chain;
+import ratpack.core.handling.Context;
+import ratpack.core.handling.Handler;
+import ratpack.core.impose.Impositions;
+import ratpack.exec.registry.Registry;
+import ratpack.core.server.ServerConfig;
 
+import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 import static com.google.inject.Guice.createInjector;
-import static ratpack.util.Exceptions.uncheck;
+import static ratpack.func.Exceptions.uncheck;
 
 /**
  * Static utility methods for creating Google Guice based Ratpack infrastructure.
@@ -60,14 +60,14 @@ import static ratpack.util.Exceptions.uncheck;
  * <pre class="java">{@code
  * import com.google.inject.AbstractModule;
  * import ratpack.guice.Guice;
- * import ratpack.handling.Context;
- * import ratpack.handling.Handler;
+ * import ratpack.core.handling.Context;
+ * import ratpack.core.handling.Handler;
  * import ratpack.test.embed.EmbeddedApp;
  *
  * import javax.inject.Inject;
  * import javax.inject.Singleton;
  *
- * import static org.junit.Assert.*;
+ * import static org.junit.jupiter.api.Assertions.*;
  *
  * public class Example {
  *
@@ -231,9 +231,11 @@ public abstract class Guice {
 
     modules.add(new AdHocModule(binderActions));
 
-    Optional<BindingsImposition> bindingsImposition = Impositions.current().get(BindingsImposition.class);
-    if (bindingsImposition.isPresent()) {
-      BindingsImposition imposition = bindingsImposition.get();
+    Iterable<? extends BindingsImposition> bindingsImpositions = baseRegistry.maybeGet(Impositions.class)
+      .<Iterable<? extends BindingsImposition>>map(i -> i.getAll(BindingsImposition.class))
+      .orElseGet(Collections::emptyList);
+
+    for (BindingsImposition imposition : bindingsImpositions) {
       List<Action<? super Binder>> imposedBinderActions = Lists.newLinkedList();
       List<Module> imposedModules = Lists.newLinkedList();
 

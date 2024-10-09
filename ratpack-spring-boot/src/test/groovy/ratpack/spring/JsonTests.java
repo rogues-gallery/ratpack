@@ -15,36 +15,33 @@
  */
 package ratpack.spring;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.test.IntegrationTest;
-import org.springframework.boot.test.SpringApplicationConfiguration;
-import org.springframework.boot.test.TestRestTemplate;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.*;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 import ratpack.func.Action;
-import ratpack.handling.Chain;
-import ratpack.handling.Handler;
-import ratpack.server.RatpackServer;
-import ratpack.spring.JsonTests.Application;
+import ratpack.core.handling.Chain;
+import ratpack.core.handling.Handler;
+import ratpack.core.server.RatpackServer;
 import ratpack.spring.config.EnableRatpack;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static org.junit.Assert.*;
-import static ratpack.jackson.Jackson.fromJson;
-import static ratpack.jackson.Jackson.json;
+import static org.junit.jupiter.api.Assertions.*;
+import static ratpack.core.jackson.Jackson.fromJson;
+import static ratpack.core.jackson.Jackson.json;
 
-@RunWith(SpringJUnit4ClassRunner.class)
-@SpringApplicationConfiguration(classes = Application.class)
-@IntegrationTest("server.port=0")
+@ExtendWith(SpringExtension.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class JsonTests {
 
   private TestRestTemplate restTemplate = new TestRestTemplate();
@@ -55,8 +52,8 @@ public class JsonTests {
   @Test
   public void get() {
     String body = restTemplate.getForObject("http://localhost:" + server.getBindPort(), String.class);
-    assertTrue("Wrong body" + body, body.contains("{"));
-    assertFalse("Wrong body" + body, body.toLowerCase().contains("<html"));
+    assertTrue(body.contains("{"), "Wrong body" + body);
+    assertFalse(body.toLowerCase().contains("<html"), "Wrong body" + body);
   }
 
   @Test
@@ -69,7 +66,7 @@ public class JsonTests {
       String.class);
     assertEquals(HttpStatus.OK, result.getStatusCode());
     String body = restTemplate.getForObject("http://localhost:" + server.getBindPort(), String.class);
-    assertTrue("Wrong body" + body, body.contains("foo"));
+    assertTrue(body.contains("foo"), "Wrong body" + body);
   }
 
   @Configuration

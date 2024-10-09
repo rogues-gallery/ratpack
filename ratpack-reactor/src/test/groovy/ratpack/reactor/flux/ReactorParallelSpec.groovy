@@ -18,17 +18,17 @@ package ratpack.reactor.flux
 
 import ratpack.exec.Execution
 import ratpack.reactor.ReactorRatpack
-import ratpack.registry.RegistrySpec
+import ratpack.exec.registry.RegistrySpec
 import ratpack.test.exec.ExecHarness
+import ratpack.test.internal.BaseRatpackSpec
 import reactor.core.publisher.Flux
 import spock.lang.AutoCleanup
-import spock.lang.Specification
 
 import java.util.concurrent.CyclicBarrier
 import java.util.function.BiFunction
 import java.util.function.Function
 
-class ReactorParallelSpec extends Specification {
+class ReactorParallelSpec extends BaseRatpackSpec {
 
   @AutoCleanup
   def harness = ExecHarness.harness(12)

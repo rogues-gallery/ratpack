@@ -16,13 +16,13 @@
 
 package ratpack.groovy.handling
 
-import ratpack.handling.Chain
-import ratpack.handling.Handler
-import spock.lang.Specification
+import ratpack.core.handling.Chain
+import ratpack.core.handling.Handler
+import ratpack.test.internal.BaseRatpackSpec
 
 import java.lang.reflect.Modifier
 
-class ChainSubclassParitySpec extends Specification {
+class ChainSubclassParitySpec extends BaseRatpackSpec {
 
   def javaType = Chain
   def groovyType = GroovyChain

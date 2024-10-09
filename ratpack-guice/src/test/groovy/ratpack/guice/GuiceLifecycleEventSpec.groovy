@@ -16,8 +16,8 @@
 
 package ratpack.guice
 
-import ratpack.server.Service
-import ratpack.server.StartEvent
+import ratpack.core.service.Service
+import ratpack.core.service.StartEvent
 import ratpack.test.internal.RatpackGroovyDslSpec
 
 import javax.inject.Inject

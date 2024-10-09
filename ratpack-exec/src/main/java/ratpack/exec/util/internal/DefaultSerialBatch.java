@@ -23,9 +23,9 @@ import ratpack.exec.Promise;
 import ratpack.exec.util.SerialBatch;
 import ratpack.func.BiAction;
 import ratpack.func.BiFunction;
-import ratpack.stream.Streams;
-import ratpack.stream.TransformablePublisher;
-import ratpack.util.Types;
+import ratpack.exec.stream.Streams;
+import ratpack.exec.stream.TransformablePublisher;
+import ratpack.func.Types;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -59,7 +59,7 @@ public class DefaultSerialBatch<T> implements SerialBatch<T> {
   public Promise<List<T>> yield() {
     List<T> results = new ArrayList<>();
     return Promise.async(d ->
-      forEach((i, r) -> results.add(r))
+      forEach(promises, (i, r) -> results.add(r))
         .onError(d::error)
         .then(() -> d.success(results))
     );
@@ -67,6 +67,10 @@ public class DefaultSerialBatch<T> implements SerialBatch<T> {
 
   @Override
   public Operation forEach(BiAction<? super Integer, ? super T> consumer) {
+    return forEach(promises, consumer);
+  }
+
+  private static <T> Operation forEach(Iterable<? extends Promise<T>> promises, BiAction<? super Integer, ? super T> consumer) {
     return Promise.<Void>async(d ->
       yieldPromise(promises.iterator(), 0, (i, r) -> consumer.execute(i, r.getValue()), (i, r) -> {
         d.error(r.getThrowable());

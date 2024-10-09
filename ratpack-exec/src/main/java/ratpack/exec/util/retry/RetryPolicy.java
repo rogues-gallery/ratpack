@@ -17,6 +17,7 @@
 package ratpack.exec.util.retry;
 
 import ratpack.exec.Promise;
+import ratpack.func.BiAction;
 
 import java.time.Duration;
 
@@ -43,7 +44,7 @@ import java.time.Duration;
  * import java.util.List;
  * import java.util.concurrent.atomic.AtomicInteger;
  *
- * import static org.junit.Assert.assertEquals;
+ * import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * public class Example {
  *   private static final List<String> LOG = new LinkedList<>();
@@ -67,7 +68,7 @@ import java.time.Duration;
  * }
  * }</pre>
  *
- * @see Promise#retry(RetryPolicy, ratpack.func.BiAction)
+ * @see Promise#retry(RetryPolicy, BiAction)
  * @since 1.7
  */
 public interface RetryPolicy {

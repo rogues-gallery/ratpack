@@ -17,11 +17,11 @@
 package ratpack.test.internal.snippets.fixture;
 
 import ratpack.test.internal.snippets.executer.SnippetExecuter;
-import ratpack.server.RatpackServer;
+import ratpack.core.server.RatpackServer;
 import ratpack.test.ServerBackedApplicationUnderTest;
 import ratpack.test.http.TestHttpClient;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class HelloWorldAppSnippetExecuter extends ServerCaptureSnippetExecuter {
 

@@ -20,9 +20,9 @@ import ratpack.exec.*;
 import ratpack.exec.internal.ResultBackedExecResult;
 import ratpack.func.Action;
 import ratpack.func.Function;
-import ratpack.registry.RegistrySpec;
+import ratpack.exec.registry.RegistrySpec;
 import ratpack.test.exec.ExecHarness;
-import ratpack.util.Exceptions;
+import ratpack.func.Exceptions;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;

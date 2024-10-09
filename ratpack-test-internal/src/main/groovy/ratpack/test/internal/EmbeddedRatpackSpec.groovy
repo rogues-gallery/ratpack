@@ -17,49 +17,39 @@
 package ratpack.test.internal
 
 import io.netty.util.CharsetUtil
-import io.netty.util.ResourceLeakDetectorFactory
-import org.junit.Rule
-import org.junit.rules.TemporaryFolder
-import ratpack.http.client.RequestSpec
+import ratpack.core.error.ServerErrorHandler
+import ratpack.core.error.internal.DefaultDevelopmentErrorHandler
+import ratpack.groovy.handling.GroovyChain
+import ratpack.groovy.test.embed.GroovyEmbeddedApp
+import ratpack.core.http.client.RequestSpec
 import ratpack.test.embed.EmbeddedApp
 import ratpack.test.http.TestHttpClient
-import ratpack.test.internal.spock.InheritedTimeout
-import ratpack.test.internal.spock.InheritedUnroll
-import spock.lang.Specification
-import spock.util.concurrent.PollingConditions
+import ratpack.test.internal.spock.TempDir
+import ratpack.test.internal.spock.TemporaryFolder
+import spock.lang.AutoCleanup
 
 import java.nio.charset.Charset
-import java.util.concurrent.atomic.AtomicReference
 
-@InheritedTimeout(30)
-@InheritedUnroll
-abstract class EmbeddedRatpackSpec extends Specification {
+abstract class EmbeddedRatpackSpec extends BaseRatpackSpec {
 
-  private static final AtomicReference<Boolean> LEAKED = new AtomicReference<>(false)
-
-  static {
-    System.setProperty("io.netty.leakDetectionLevel", "paranoid")
-    ResourceLeakDetectorFactory.resourceLeakDetectorFactory = new FlaggingResourceLeakDetectorFactory(LEAKED)
-  }
-  @Rule
+  @TempDir
   TemporaryFolder temporaryFolder
 
   @Delegate
   TestHttpClient client
 
+  @AutoCleanup
+  EmbeddedApp otherApp
+
   boolean failOnLeak = true
 
   abstract EmbeddedApp getApplication()
-
-  @SuppressWarnings("FieldName")
-  public static final PollingConditions wait = new PollingConditions(timeout: 3)
 
   void configureRequest(RequestSpec requestSpecification) {
     // do nothing
   }
 
   def setup() {
-    LEAKED.set(false)
     client = testHttpClient({ application.address }) {
       configureRequest(it)
     }
@@ -71,10 +61,17 @@ abstract class EmbeddedRatpackSpec extends Specification {
     } catch (Throwable ignore) {
 
     }
+  }
 
-    if (LEAKED.get() && failOnLeak) {
-      throw new Exception("A resource has leaked in this test!")
+  EmbeddedApp otherApp(@DelegatesTo(value = GroovyChain, strategy = Closure.DELEGATE_FIRST) Closure<?> closure) {
+    otherApp = GroovyEmbeddedApp.of {
+      registryOf { add ServerErrorHandler, new DefaultDevelopmentErrorHandler() }
+      handlers(closure)
     }
+  }
+
+  URI otherAppUrl(String path = "") {
+    new URI("$otherApp.address$path")
   }
 
   String rawResponse(Charset charset = CharsetUtil.UTF_8) {
@@ -99,7 +96,7 @@ abstract class EmbeddedRatpackSpec extends Specification {
     socket
   }
 
-  Socket withSocket(Socket socket = this.socket(), @DelegatesTo(OutputStream) Closure<?> closure) {
+  Socket withSocket(Socket socket = this.socket(), @DelegatesTo(OutputStreamWriter) Closure<?> closure) {
     def os = socket.outputStream
     new OutputStreamWriter(os, "UTF-8").with(closure)
     socket

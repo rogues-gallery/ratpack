@@ -19,11 +19,13 @@ package ratpack.site
 import groovy.util.logging.Slf4j
 import ratpack.site.crawl.Crawler
 import ratpack.site.crawl.PrettyPrintCollection
-import ratpack.util.RatpackVersion
-import spock.lang.Specification
+import ratpack.test.internal.BaseRatpackSpec
+import ratpack.test.internal.spock.InheritedTimeout
+import ratpack.exec.util.RatpackVersion
 
 @Slf4j
-class LinkCrawlSpec extends Specification {
+@InheritedTimeout(180)
+class LinkCrawlSpec extends BaseRatpackSpec {
 
   def "site has no bad links"() {
     given:
@@ -43,16 +45,13 @@ class LinkCrawlSpec extends Specification {
       "http://www.slf4j.org",
       "https://travis-ci.org",
       "http://www.gebish.org",
-      "https://github.com/alkemist"
+      "https://github.com/alkemist",
+      "http://breakpoint-sass.com/"
     ]
 
     def crawler = new Crawler(aut.address.toString()) {
-      boolean shouldUseHeadRequest(Link url) {
-        return url.uri.host != "bintray.com" && super.shouldUseHeadRequest(url)
-      }
-
       @Override
-      boolean isCrawlable(Link link) {
+      boolean isCrawlable(Crawler.Link link) {
         if (link.uri.path.startsWith("/manual") && !link.uri.path.startsWith("/manual/${RatpackVersion.version - "-SNAPSHOT"}")) {
           false
         } else {
@@ -60,7 +59,7 @@ class LinkCrawlSpec extends Specification {
         }
       }
 
-      List<String> findPageLinks(Response response) {
+      List<String> findPageLinks(Crawler.Response response) {
         def document = response.document
         document == null ? [] : document.select("body a").collect {
           it.attr("href")
@@ -70,7 +69,7 @@ class LinkCrawlSpec extends Specification {
       }
 
       @Override
-      void addPageErrors(Link link, Response response) {
+      void addPageErrors(Crawler.Link link, Crawler.Response response) {
         response.document?.text()?.findAll(~$/\[.+]\(.+\)/$)?.each {
           link.errors << new BadMarkdownLinkSyntax(it)
         }

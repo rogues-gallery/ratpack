@@ -17,22 +17,21 @@
 package ratpack.retrofit.internal;
 
 import okhttp3.*;
-import okhttp3.Call;
-import okhttp3.Response;
 import okio.Buffer;
 import okio.BufferedSource;
+import okio.Timeout;
 import ratpack.exec.Promise;
 import ratpack.func.Factory;
-import ratpack.http.MutableHeaders;
-import ratpack.http.client.HttpClient;
-import ratpack.http.client.ReceivedResponse;
-import ratpack.http.client.RequestSpec;
+import ratpack.core.http.MutableHeaders;
+import ratpack.core.http.client.HttpClient;
+import ratpack.core.http.client.ReceivedResponse;
+import ratpack.core.http.client.RequestSpec;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import static ratpack.util.Exceptions.uncheck;
+import static ratpack.func.Exceptions.uncheck;
 
 public class RatpackCallFactory implements okhttp3.Call.Factory {
 
@@ -85,6 +84,11 @@ public class RatpackCallFactory implements okhttp3.Call.Factory {
       );
     }
 
+    @Override
+    public Timeout timeout() {
+      return Timeout.NONE;
+    }
+
     Promise<ReceivedResponse> promise() {
       HttpClient client = uncheck(clientFactory);
       return client.request(request.url().uri(), this::configureRequest);
@@ -93,23 +97,27 @@ public class RatpackCallFactory implements okhttp3.Call.Factory {
     private void configureRequest(RequestSpec spec) throws Exception {
       spec.method(request.method());
       spec.headers(this::configureHeaders);
-      if (request.body() != null) {
-        spec.body(this::configureBody);
-      }
+      spec.body(this::configureBody);
     }
 
     private void configureHeaders(MutableHeaders h) {
-      for(Map.Entry<String, List<String>> entry : request.headers().toMultimap().entrySet()) {
+      for (Map.Entry<String, List<String>> entry : request.headers().toMultimap().entrySet()) {
         h.set(entry.getKey(), entry.getValue());
       }
     }
 
     private void configureBody(RequestSpec.Body b) throws Exception {
-      Buffer buffer = new Buffer();
-      request.body().writeTo(buffer);
-      b.stream(buffer::writeTo);
-      if(request.body().contentType() != null) {
-        b.type(request.body().contentType().toString());
+      RequestBody body = request.body();
+      if (body != null) {
+        if (body.contentLength() > 0) {
+          Buffer buffer = new Buffer();
+          body.writeTo(buffer);
+          b.stream(buffer::writeTo);
+        }
+        MediaType contentType = body.contentType();
+        if (contentType != null) {
+          b.type(contentType.toString());
+        }
       }
     }
 

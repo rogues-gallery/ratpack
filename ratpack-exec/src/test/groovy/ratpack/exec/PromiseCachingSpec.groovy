@@ -20,15 +20,16 @@ import ratpack.exec.util.ParallelBatch
 import ratpack.exec.util.SerialBatch
 import ratpack.func.Action
 import ratpack.test.exec.ExecHarness
+import ratpack.test.internal.BaseRatpackSpec
 import spock.lang.AutoCleanup
-import spock.lang.Specification
+import spock.lang.Issue
 
 import java.time.Duration
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
-class PromiseCachingSpec extends Specification {
+class PromiseCachingSpec extends BaseRatpackSpec {
 
   @AutoCleanup
   ExecHarness execHarness = ExecHarness.harness()
@@ -39,9 +40,9 @@ class PromiseCachingSpec extends Specification {
     execHarness.controller.fork()
       .onError(onError)
       .onComplete({
-      events << "complete"
-      latch.countDown()
-    })
+        events << "complete"
+        latch.countDown()
+      })
       .start { action.execute(it) }
     latch.await()
   }
@@ -72,10 +73,10 @@ class PromiseCachingSpec extends Specification {
       } start { forkedExecution ->
         cached.map { it + "-bar" }
           .then {
-          assert Execution.current().is(forkedExecution)
+            assert Execution.current().is(forkedExecution)
 
-          innerEvents << it
-        }
+            innerEvents << it
+          }
 
         Blocking.get { "next" }.cache().then {
           assert Execution.current().is(forkedExecution)
@@ -222,4 +223,15 @@ class PromiseCachingSpec extends Specification {
     events.poll() == 1
   }
 
+  @Issue("https://github.com/ratpack/ratpack/issues/1369")
+  def "cached promise can be yielded concurrently"() {
+    when:
+    1_000.times { i ->
+      def p = [Promise.value(1).cache()] * 10
+      execHarness.yield { c -> ParallelBatch.of(p).yield() }.valueOrThrow
+    }
+
+    then:
+    noExceptionThrown()
+  }
 }

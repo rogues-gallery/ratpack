@@ -19,10 +19,10 @@ package ratpack.retrofit.internal;
 import com.google.common.reflect.TypeToken;
 import ratpack.exec.Promise;
 import ratpack.func.Factory;
-import ratpack.http.client.HttpClient;
-import ratpack.http.client.ReceivedResponse;
+import ratpack.core.http.client.HttpClient;
+import ratpack.core.http.client.ReceivedResponse;
 import ratpack.retrofit.RatpackRetrofitCallException;
-import ratpack.util.Exceptions;
+import ratpack.func.Exceptions;
 import retrofit2.*;
 
 import java.lang.annotation.Annotation;

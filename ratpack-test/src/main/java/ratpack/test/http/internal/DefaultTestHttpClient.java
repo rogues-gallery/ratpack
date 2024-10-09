@@ -24,20 +24,19 @@ import io.netty.handler.codec.http.cookie.ClientCookieDecoder;
 import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
 import io.netty.handler.codec.http.cookie.Cookie;
 import ratpack.exec.ExecController;
-import ratpack.exec.internal.DefaultExecController;
 import ratpack.func.Action;
 import ratpack.func.Function;
-import ratpack.http.HttpUrlBuilder;
-import ratpack.http.client.HttpClient;
-import ratpack.http.client.ReceivedResponse;
-import ratpack.http.client.RequestSpec;
-import ratpack.http.client.internal.DelegatingRequestSpec;
-import ratpack.http.internal.HttpHeaderConstants;
+import ratpack.core.http.HttpUrlBuilder;
+import ratpack.core.http.client.HttpClient;
+import ratpack.core.http.client.ReceivedResponse;
+import ratpack.core.http.client.RequestSpec;
+import ratpack.core.http.client.internal.DelegatingRequestSpec;
+import ratpack.core.http.internal.HttpHeaderConstants;
 import ratpack.test.ApplicationUnderTest;
 import ratpack.test.http.TestHttpClient;
 import ratpack.test.internal.BlockingHttpClient;
 import ratpack.test.internal.TestByteBufAllocators;
-import ratpack.util.Exceptions;
+import ratpack.func.Exceptions;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -46,7 +45,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static ratpack.util.Exceptions.uncheck;
+import static ratpack.func.Exceptions.uncheck;
 
 public class DefaultTestHttpClient implements TestHttpClient {
 
@@ -232,9 +231,9 @@ public class DefaultTestHttpClient implements TestHttpClient {
 
   @Override
   public ReceivedResponse request(String path, Action<? super RequestSpec> requestAction) {
-    try (ExecController execController = new DefaultExecController(2)) {
+    try (ExecController execController = ExecController.builder().numThreads(2).build()) {
       URI uri = builder(path).params(params).build();
-      try (HttpClient httpClient = httpClient()) {
+      try (HttpClient httpClient = httpClient(execController)) {
         response = client.request(httpClient, uri, execController, Duration.ofMinutes(60), requestSpec -> {
           final RequestSpec decorated = new CookieHandlingRequestSpec(requestSpec);
           decorated.get();
@@ -251,11 +250,12 @@ public class DefaultTestHttpClient implements TestHttpClient {
     return response;
   }
 
-  private HttpClient httpClient() {
+  private HttpClient httpClient(ExecController execController) {
     return Exceptions.uncheck(() -> HttpClient.of(s -> s
       .byteBufAllocator(TestByteBufAllocators.LEAKING_UNPOOLED_HEAP)
       .maxContentLength(Integer.MAX_VALUE)
       .poolSize(8)
+      .execController(execController)
     ));
   }
 

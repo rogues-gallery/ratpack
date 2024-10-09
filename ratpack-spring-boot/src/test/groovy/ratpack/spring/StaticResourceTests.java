@@ -15,28 +15,25 @@
  */
 package ratpack.spring;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.test.IntegrationTest;
-import org.springframework.boot.test.SpringApplicationConfiguration;
-import org.springframework.boot.test.TestRestTemplate;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 import ratpack.func.Action;
-import ratpack.handling.Chain;
-import ratpack.server.RatpackServer;
-import ratpack.spring.StaticResourceTests.Application;
+import ratpack.core.handling.Chain;
+import ratpack.core.server.RatpackServer;
 import ratpack.spring.config.EnableRatpack;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@RunWith(SpringJUnit4ClassRunner.class)
-@SpringApplicationConfiguration(classes = Application.class)
-@IntegrationTest("server.port=0")
+@ExtendWith(SpringExtension.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class StaticResourceTests {
 
   private TestRestTemplate restTemplate = new TestRestTemplate();
@@ -49,7 +46,7 @@ public class StaticResourceTests {
     String body = restTemplate
       .getForObject("http://localhost:" + server.getBindPort() + "/root/main.css",
         String.class);
-    assertTrue("Wrong body" + body, body.contains("background"));
+    assertTrue(body.contains("background"), "Wrong body" + body);
   }
 
   @Configuration

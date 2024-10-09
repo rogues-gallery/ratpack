@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReadWriteLock;
  * import ratpack.exec.Promise;
  * import ratpack.exec.util.ParallelBatch;
  * import ratpack.exec.util.ReadWriteAccess;
- * import ratpack.file.FileIo;
+ * import ratpack.core.file.FileIo;
  * import ratpack.test.embed.EmbeddedApp;
  * import ratpack.test.embed.EphemeralBaseDir;
  * import ratpack.test.exec.ExecHarness;
@@ -58,7 +58,7 @@ import java.util.concurrent.locks.ReadWriteLock;
  * import java.time.Duration;
  *
  * import static java.nio.file.StandardOpenOption.*;
- * import static org.junit.Assert.assertEquals;
+ * import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * public class Example {
  *
@@ -77,7 +77,7 @@ import java.util.concurrent.locks.ReadWriteLock;
  *               .get(() ->
  *                 FileIo.read(FileIo.open(f, READ, CREATE), allocator, 8192)
  *                   .apply(access::read)
- *                   .map(b -> b.toString(Charset.defaultCharset()))
+ *                   .map(b -> { try { return b.toString(Charset.defaultCharset()); } finally { b.release(); } })
  *                   .then(ctx::render)
  *               )
  *               .post(() ->
@@ -111,7 +111,7 @@ import java.util.concurrent.locks.ReadWriteLock;
  *           ParallelBatch.of(requests).yield()
  *         ).getValueOrThrow();
  *
- *         assertEquals("foo", Files.toString(f.toFile(), Charset.defaultCharset()));
+ *         assertEquals("foo", Files.asCharSource(f.toFile(), Charset.defaultCharset()).read());
  *         assertEquals(400, results.size());
  *       });
  *     });

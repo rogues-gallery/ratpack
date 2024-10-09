@@ -22,8 +22,8 @@ import groovy.text.markup.TemplateConfiguration;
 import ratpack.groovy.template.internal.CachingTemplateResolver;
 import ratpack.groovy.template.internal.MarkupTemplateRenderer;
 import ratpack.guice.ConfigurableModule;
-import ratpack.render.Renderer;
-import ratpack.server.ServerConfig;
+import ratpack.core.render.Renderer;
+import ratpack.core.server.ServerConfig;
 
 import javax.inject.Singleton;
 import java.nio.file.Path;
@@ -37,8 +37,8 @@ import java.nio.file.Path;
  * static methods.
  * </p>
  * <p>
- * By default templates are looked up in the {@code templates} directory of the application root.
- * So {@code groovyMarkupTemplate("my/template/path.gtpl")} maps to {@code tempaltes/my/template/path.gtpl} in the application root directory.
+ * By default, templates are looked up in the {@code templates} directory of the application root.
+ * So {@code groovyMarkupTemplate("my/template/path.gtpl")} maps to {@code templates/my/template/path.gtpl} in the application root directory.
  * <p>
  * The template engine can be configured using the {@link TemplateConfiguration template configuration}. In particular, it is possible to configure
  * things like automatic indentation.
@@ -55,7 +55,7 @@ import java.nio.file.Path;
  * import java.nio.file.Path;
  *
  * import static ratpack.groovy.Groovy.groovyMarkupTemplate;
- * import static org.junit.Assert.*;
+ * import static org.junit.jupiter.api.Assertions.*;
  *
  * public class Example {
  *   public static void main(String... args) throws Exception {

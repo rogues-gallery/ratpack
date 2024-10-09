@@ -22,13 +22,13 @@ import ratpack.exec.ExecController;
 import ratpack.exec.ExecResult;
 import ratpack.exec.Result;
 import ratpack.func.Action;
-import ratpack.http.TypedData;
-import ratpack.http.client.HttpClient;
-import ratpack.http.client.ReceivedResponse;
-import ratpack.http.client.RequestSpec;
-import ratpack.http.client.internal.DefaultReceivedResponse;
-import ratpack.http.internal.ByteBufBackedTypedData;
-import ratpack.util.Exceptions;
+import ratpack.core.http.TypedData;
+import ratpack.core.http.client.HttpClient;
+import ratpack.core.http.client.ReceivedResponse;
+import ratpack.core.http.client.RequestSpec;
+import ratpack.core.http.client.internal.DefaultReceivedResponse;
+import ratpack.core.http.internal.ByteBufBackedTypedData;
+import ratpack.func.Exceptions;
 
 import java.net.URI;
 import java.time.Duration;
@@ -40,7 +40,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
 
 public class BlockingHttpClient {
-
   public ReceivedResponse request(HttpClient httpClient, URI uri, ExecController execController, Duration timeout, Action<? super RequestSpec> action) throws Throwable {
     CountDownLatch latch = new CountDownLatch(1);
     AtomicReference<ExecResult<ReceivedResponse>> result = new AtomicReference<>();
@@ -87,6 +86,7 @@ public class BlockingHttpClient {
         throw new IllegalStateException("Request to " + uri + " took more than " + timeout.get(unit) + " " + unit.toString() + " to complete");
       }
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       throw Exceptions.uncheck(e);
     }
 

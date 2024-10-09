@@ -21,13 +21,13 @@ import com.google.common.reflect.TypeToken;
 import com.google.inject.*;
 import ratpack.func.Action;
 import ratpack.func.Function;
-import ratpack.registry.internal.TypeCaching;
-import ratpack.util.Types;
+import ratpack.func.internal.TypeCaching;
+import ratpack.func.Types;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 
-import static ratpack.util.Exceptions.uncheck;
+import static ratpack.func.Exceptions.uncheck;
 
 public abstract class GuiceUtil {
 

@@ -15,28 +15,25 @@
  */
 package ratpack.spring;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.test.IntegrationTest;
-import org.springframework.boot.test.SpringApplicationConfiguration;
-import org.springframework.boot.test.TestRestTemplate;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
-import ratpack.server.RatpackServer;
-import ratpack.spring.DefaultStaticResourceTests.Application;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
+import ratpack.core.server.RatpackServer;
 import ratpack.spring.config.EnableRatpack;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@RunWith(SpringJUnit4ClassRunner.class)
-@SpringApplicationConfiguration(classes = Application.class)
-@IntegrationTest("server.port=0")
+@ExtendWith(SpringExtension.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class DefaultStaticResourceTests {
 
   private TestRestTemplate restTemplate = new TestRestTemplate();
@@ -50,13 +47,13 @@ public class DefaultStaticResourceTests {
       .getForEntity("http://localhost:" + server.getBindPort() + "/main.css",
         String.class);
     assertEquals(HttpStatus.OK, mainCssResponse.getStatusCode());
-    assertTrue("Wrong body" + mainCssResponse.getBody(), mainCssResponse.getBody().contains("background: red;"));
+    assertTrue(mainCssResponse.getBody().contains("background: red;"), "Wrong body" + mainCssResponse.getBody());
 
     ResponseEntity<String> publicCssResponse = restTemplate
       .getForEntity("http://localhost:" + server.getBindPort() + "/public.css",
         String.class);
     assertEquals(HttpStatus.OK, publicCssResponse.getStatusCode());
-    assertTrue("Wrong body" + publicCssResponse.getBody(), publicCssResponse.getBody().contains("color: blue;"));
+    assertTrue(publicCssResponse.getBody().contains("color: blue;"), "Wrong body" + publicCssResponse.getBody());
   }
 
   @Configuration

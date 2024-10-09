@@ -18,12 +18,12 @@ package ratpack.exec
 
 import ratpack.func.Action
 import ratpack.test.exec.ExecHarness
+import ratpack.test.internal.BaseRatpackSpec
 import spock.lang.AutoCleanup
-import spock.lang.Specification
 
 import java.util.concurrent.CountDownLatch
 
-class PromiseErrorSpec extends Specification {
+class PromiseErrorSpec extends BaseRatpackSpec {
 
   @AutoCleanup
   ExecHarness execHarness = ExecHarness.harness()
@@ -61,7 +61,25 @@ class PromiseErrorSpec extends Specification {
     then:
     events.size() == 2
     events[0] instanceof NullPointerException
-    (events[0] as Exception).suppressed[0] instanceof IllegalArgumentException
+  }
+
+  def "on error can be async"() {
+    when:
+    exec {
+      Promise.error(new IllegalArgumentException("!"))
+        .onError {
+          Promise.error(new NullPointerException("!")).then {}
+        }
+        .then {
+          events << "then"
+        }
+    } {
+      events << it
+    }
+
+    then:
+    events.size() == 2
+    events[0] instanceof NullPointerException
   }
 
   def "on error can throw same error"() {

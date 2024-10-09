@@ -24,18 +24,35 @@ ext.apiLinks = [
 ]
 
 dependencies {
-  compile project(":ratpack-core")
-  compile project(":ratpack-guice")
-  testCompile project(":ratpack-test")
+  api project(":ratpack-core")
+  api project(":ratpack-guice")
+
+  implementation "org.javassist:javassist:${commonVersions.javassist}"
+  testImplementation project(":ratpack-test")
 }
 
-processResources {
-  inputs.property("groovyVersion", commonVersions.groovy)
-  def minimumGroovyVersionFile = file("src/main/resources/ratpack/minimum-groovy-version.txt")
-  outputs.file minimumGroovyVersionFile
+task writeGroovyVersionFile {
+  def versionFile = file("$buildDir/ratpack-groovy-version/ratpack/minimum-groovy-version.txt")
+  inputs.property "groovyVersion", commonVersions.groovy
+  outputs.dir versionFile.parentFile.parentFile
 
   doFirst {
-    minimumGroovyVersionFile.parentFile.mkdirs()
-    minimumGroovyVersionFile.text = commonVersions.groovy
+    assert versionFile.parentFile.mkdirs() || versionFile.parentFile.directory
+    versionFile.text = commonVersions.groovy
   }
 }
+
+sourceSets {
+  main {
+    resources {
+      srcDirs += [
+        tasks.named("writeGroovyVersionFile")
+      ]
+    }
+  }
+}
+
+// Add implicit dependency due to https://github.com/gradle/gradle/issues/18563
+//tasks.named("sourcesJar").configure {
+//  it.from(tasks.named("processResources"))
+//}

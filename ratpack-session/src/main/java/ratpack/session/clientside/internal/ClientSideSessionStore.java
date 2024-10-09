@@ -29,10 +29,12 @@ import io.netty.handler.codec.base64.Base64Dialect;
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.util.AsciiString;
 import io.netty.util.CharsetUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ratpack.exec.Operation;
 import ratpack.exec.Promise;
-import ratpack.http.Request;
-import ratpack.http.Response;
+import ratpack.core.http.Request;
+import ratpack.core.http.Response;
 import ratpack.session.SessionCookieConfig;
 import ratpack.session.SessionStore;
 import ratpack.session.clientside.ClientSideSessionConfig;
@@ -42,9 +44,11 @@ import ratpack.session.clientside.Signer;
 import javax.inject.Provider;
 import java.nio.CharBuffer;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 public class ClientSideSessionStore implements SessionStore {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(ClientSideSessionStore.class);
   private static final String SESSION_SEPARATOR = ":";
 
   private final Provider<Request> request;
@@ -57,14 +61,15 @@ public class ClientSideSessionStore implements SessionStore {
 
   private final CookieOrdering latCookieOrdering;
   private final CookieOrdering dataCookieOrdering;
+  private final long expirySeconds;
 
   private static class CookieOrdering extends Ordering<Cookie> {
     private final int prefixLen;
-    private final String prefix;
+    private final Pattern pattern;
 
     public CookieOrdering(String prefix) {
-      this.prefix = prefix;
       this.prefixLen = prefix.length() + 1;
+      this.pattern = Pattern.compile(Pattern.quote(prefix) + "_" + "\\d+");
     }
 
     @Override
@@ -84,6 +89,7 @@ public class ClientSideSessionStore implements SessionStore {
     this.bufferAllocator = bufferAllocator;
     this.cookieConfig = cookieConfig;
     this.config = config;
+    this.expirySeconds = cookieConfig.getExpires() == null ? 0 : cookieConfig.getExpires().getSeconds();
 
     this.latCookieOrdering = new CookieOrdering(config.getLastAccessTimeCookieName());
     this.dataCookieOrdering = new CookieOrdering(config.getSessionCookieName());
@@ -96,7 +102,7 @@ public class ClientSideSessionStore implements SessionStore {
       int oldSessionCookiesCount = cookieStorage.data.size();
       String[] sessionCookiePartitions = serialize(sessionData);
       for (int i = 0; i < sessionCookiePartitions.length; i++) {
-        addCookie(config.getSessionCookieName() + "_" + i, sessionCookiePartitions[i]);
+        setCookie(config.getSessionCookieName() + "_" + i, sessionCookiePartitions[i]);
       }
       for (int i = sessionCookiePartitions.length; i < oldSessionCookiesCount; i++) {
         invalidateCookie(config.getSessionCookieName() + "_" + i);
@@ -109,11 +115,16 @@ public class ClientSideSessionStore implements SessionStore {
   public Promise<ByteBuf> load(AsciiString sessionId) {
     return Promise.sync(() -> {
       CookieStorage cookieStorage = getCookieStorage();
-      if (!isValid(cookieStorage)) {
-        return Unpooled.EMPTY_BUFFER;
+      ByteBuf data = deserialize(cookieStorage);
+      if (data.isReadable()) {
+        try {
+          setLastAccessTime(cookieStorage);
+        } catch (Exception e) {
+          data.release();
+          throw e;
+        }
       }
-      setLastAccessTime(cookieStorage);
-      return deserialize(cookieStorage.data);
+      return data;
     });
   }
 
@@ -133,36 +144,41 @@ public class ClientSideSessionStore implements SessionStore {
     return Promise.value(-1L);
   }
 
-  private boolean isValid(CookieStorage cookieStorage) throws Exception {
-    ByteBuf payload = null;
+  private ByteBuf deserialize(CookieStorage cookieStorage) throws Exception {
+    ByteBuf lastAccessTokenPayload = null;
 
     try {
-      payload = deserialize(cookieStorage.lastAccessToken);
-      if (payload.readableBytes() == 0) {
+      lastAccessTokenPayload = deserialize(cookieStorage.lastAccessToken);
+      if (lastAccessTokenPayload.readableBytes() == 0) {
         reset(cookieStorage);
-        return false;
+        return Unpooled.EMPTY_BUFFER;
       }
       long lastAccessTime;
       try {
-        lastAccessTime = payload.readLong();
+        lastAccessTime = lastAccessTokenPayload.readLong();
       } catch (IndexOutOfBoundsException e) {
-        // When using a NoPadding algorithm, decrypting the payload may trim one or more 0-bytes that are required in
+        // When using a NoPadding algorithm, decrypting the lastAccessTokenPayload may trim one or more 0-bytes that are required in
         // order for us to read epoch timestamps ending in one or more 0-bytes, so get the long directly instead
-        lastAccessTime = payload.getLong(payload.readerIndex());
+        lastAccessTime = lastAccessTokenPayload.getLong(lastAccessTokenPayload.readerIndex());
       }
 
       long currentTime = System.currentTimeMillis();
       long maxInactivityIntervalMillis = config.getMaxInactivityInterval().toMillis();
       if (currentTime - lastAccessTime > maxInactivityIntervalMillis) {
         reset(cookieStorage);
-        return false;
+        return Unpooled.EMPTY_BUFFER;
       }
+
+      return deserialize(cookieStorage.data);
+    } catch (Throwable t) {
+      LOGGER.debug("Error deserializing client side session storage", t);
+      reset(cookieStorage);
+      return Unpooled.EMPTY_BUFFER;
     } finally {
-      if (payload != null) {
-        payload.release();
+      if (lastAccessTokenPayload != null) {
+        lastAccessTokenPayload.release();
       }
     }
-    return true;
   }
 
   private void setLastAccessTime(CookieStorage cookieStorage) throws Exception {
@@ -173,7 +189,7 @@ public class ClientSideSessionStore implements SessionStore {
       int oldCookiesCount = cookieStorage.lastAccessToken.size();
       String[] partitions = serialize(data);
       for (int i = 0; i < partitions.length; i++) {
-        addCookie(config.getLastAccessTimeCookieName() + "_" + i, partitions[i]);
+        setCookie(config.getLastAccessTimeCookieName() + "_" + i, partitions[i]);
       }
       for (int i = partitions.length; i < oldCookiesCount; i++) {
         invalidateCookie(config.getLastAccessTimeCookieName() + "_" + i);
@@ -311,7 +327,7 @@ public class ClientSideSessionStore implements SessionStore {
   }
 
   private ImmutableList<Cookie> readCookies(CookieOrdering cookieOrdering, Request request) {
-    Iterable<Cookie> iterable = Iterables.filter(request.getCookies(), c -> c.name().startsWith(cookieOrdering.prefix));
+    Iterable<Cookie> iterable = Iterables.filter(request.getCookies(), c -> cookieOrdering.pattern.matcher(c.name()).matches());
     return cookieOrdering.immutableSortedCopy(iterable);
   }
 
@@ -320,34 +336,37 @@ public class ClientSideSessionStore implements SessionStore {
   }
 
   private void invalidateCookie(String name) {
-    Cookie cookie = response.get().expireCookie(name);
-    if (cookieConfig.getPath() != null) {
-      cookie.setPath(cookieConfig.getPath());
-    }
-    if (cookieConfig.getDomain() != null) {
-      cookie.setDomain(cookieConfig.getDomain());
-    }
-    cookie.setHttpOnly(cookieConfig.isHttpOnly());
-    cookie.setSecure(cookieConfig.isSecure());
+    Cookie cookie = responseCookie(name);
+    cookie.setValue("");
+    cookie.setMaxAge(0);
   }
 
-  private void addCookie(String name, String value) {
-    Response r = response.get();
-    Cookie cookie = r.getCookies().stream().filter(c -> c.name().equals(name)).findFirst().orElseGet(() -> r.cookie(name, value));
+  private void setCookie(String name, String value) {
+    Cookie cookie = responseCookie(name);
     cookie.setValue(value);
-
-    if (cookieConfig.getPath() != null) {
-      cookie.setPath(cookieConfig.getPath());
-    }
-    if (cookieConfig.getDomain() != null) {
-      cookie.setDomain(cookieConfig.getDomain());
-    }
-
-    long expirySeconds = cookieConfig.getExpires() == null ? 0 : cookieConfig.getExpires().getSeconds();
     if (expirySeconds > 0) {
       cookie.setMaxAge(expirySeconds);
     }
-    cookie.setHttpOnly(cookieConfig.isHttpOnly());
-    cookie.setSecure(cookieConfig.isSecure());
+  }
+
+  private Cookie responseCookie(String name) {
+    Response r = response.get();
+    return r.getCookies()
+      .stream()
+      .filter(c -> c.name().equals(name))
+      .findFirst()
+      .orElseGet(() -> {
+        Cookie createdCookie = r.cookie(name, "");
+        if (cookieConfig.getPath() != null) {
+          createdCookie.setPath(cookieConfig.getPath());
+        }
+        if (cookieConfig.getDomain() != null) {
+          createdCookie.setDomain(cookieConfig.getDomain());
+        }
+        createdCookie.setHttpOnly(cookieConfig.isHttpOnly());
+        createdCookie.setSecure(cookieConfig.isSecure());
+
+        return createdCookie;
+      });
   }
 }

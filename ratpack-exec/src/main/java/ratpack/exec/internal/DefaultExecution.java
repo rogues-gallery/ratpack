@@ -25,21 +25,22 @@ import io.netty.util.internal.PlatformDependent;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ratpack.api.Nullable;
+import ratpack.func.Nullable;
 import ratpack.exec.*;
 import ratpack.func.Action;
 import ratpack.func.Block;
-import ratpack.registry.MutableRegistry;
-import ratpack.registry.NotInRegistryException;
-import ratpack.registry.Registry;
-import ratpack.registry.RegistrySpec;
-import ratpack.registry.internal.DefaultMutableRegistry;
-import ratpack.stream.TransformablePublisher;
+import ratpack.func.Factory;
+import ratpack.exec.registry.MutableRegistry;
+import ratpack.exec.registry.NotInRegistryException;
+import ratpack.exec.registry.Registry;
+import ratpack.exec.registry.RegistrySpec;
+import ratpack.exec.registry.internal.DefaultMutableRegistry;
+import ratpack.exec.stream.TransformablePublisher;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+@SuppressWarnings("UnstableApiUsage")
 public class DefaultExecution implements Execution {
 
   public final static Logger LOGGER = LoggerFactory.getLogger(Execution.class);
@@ -47,7 +48,7 @@ public class DefaultExecution implements Execution {
   private ExecStream execStream;
 
   private final Ref ref;
-  private final ExecControllerInternal controller;
+  private final ExecController controller;
   private final EventLoop eventLoop;
   private final Action<? super Throwable> onError;
   private final Action<? super Execution> onComplete;
@@ -62,7 +63,8 @@ public class DefaultExecution implements Execution {
   private Thread thread;
 
   public DefaultExecution(
-    ExecControllerInternal controller, @Nullable ExecutionRef parent,
+    ExecController controller,
+    @Nullable ExecutionRef parent,
     EventLoop eventLoop,
     Action<? super RegistrySpec> registryInit,
     Action<? super Execution> action,
@@ -80,17 +82,21 @@ public class DefaultExecution implements Execution {
     onStart.execute(this);
 
     this.execStream = new InitialExecStream(() -> action.execute(this));
+    this.interceptors = copyInterceptors(controller, registry);
 
-    this.interceptors = Iterables.concat(
-      controller.getInterceptors(),
-      ImmutableList.copyOf(registry.getAll(ExecInterceptor.class))
-    );
+    controller.getInitializers().forEach(initializer -> initializer.init(this));
+    registry.getAll(ExecInitializer.class).forEach(initializer -> initializer.init(this));
+  }
 
-    for (ExecInitializer initializer : controller.getInitializers()) {
-      initializer.init(this);
-    }
-    for (ExecInitializer initializer : registry.getAll(ExecInitializer.class)) {
-      initializer.init(this);
+  private static Iterable<? extends ExecInterceptor> copyInterceptors(ExecController controller, Registry registry) {
+    ImmutableList<ExecInterceptor> registryInterceptors = ImmutableList.copyOf(registry.getAll(ExecInterceptor.class));
+    if (registryInterceptors.isEmpty()) {
+      return controller.getInterceptors();
+    } else {
+      return Iterables.concat(
+        controller.getInterceptors(),
+        registryInterceptors
+      );
     }
   }
 
@@ -153,6 +159,11 @@ public class DefaultExecution implements Execution {
     drain();
   }
 
+  public void error(Throwable throwable) {
+    execStream.error(throwable);
+    drain();
+  }
+
   public void eventLoopDrain() {
     eventLoop.execute(this::drain);
   }
@@ -200,6 +211,40 @@ public class DefaultExecution implements Execution {
   public void bindToThread() {
     thread = Thread.currentThread();
     ExecThreadBinding.require().setExecution(this);
+  }
+
+  public <T> T runSync(Factory<T> factory) throws Exception {
+    if (isBound()) {
+      return factory.create();
+    }
+
+    if (ExecThreadBinding.require().getExecution() != null) {
+      throw new IllegalStateException("execution already bound");
+    }
+    class Work implements Block {
+      T result;
+
+      @Override
+      public void execute() throws Exception {
+        result = factory.create();
+      }
+    }
+    Work work = new Work();
+    bindToThread();
+    try {
+      intercept(this, ExecInterceptor.ExecType.COMPUTE, interceptors.iterator(), work);
+    } finally {
+      unbindFromThread();
+    }
+    return work.result;
+  }
+
+  public static void intercept(Execution execution, ExecInterceptor.ExecType execType, final Iterator<? extends ExecInterceptor> interceptors, Block runnable) throws Exception {
+    if (interceptors.hasNext()) {
+      interceptors.next().intercept(execution, execType, () -> intercept(execution, execType, interceptors, runnable));
+    } else {
+      runnable.execute();
+    }
   }
 
   public static void interceptorError(Throwable e) {
@@ -333,6 +378,46 @@ public class DefaultExecution implements Execution {
       return this;
     }
 
+  }
+
+  private class NonUserCodeExecStream extends ExecStream {
+
+    protected final ExecStream parent;
+
+    NonUserCodeExecStream(ExecStream parent) {
+      this.parent = parent;
+    }
+
+    @Override
+    boolean exec() {
+      execStream = parent;
+      return true;
+    }
+
+    @Override
+    void delimit(Action<? super Throwable> onError, Action<? super Continuation> segment) {
+      parent.delimit(onError, segment);
+    }
+
+    @Override
+    void delimitStream(Action<? super Throwable> onError, Action<? super ContinuationStream> segment) {
+      parent.delimitStream(onError, segment);
+    }
+
+    @Override
+    void enqueue(Block segment) {
+      parent.enqueue(segment);
+    }
+
+    @Override
+    void error(Throwable throwable) {
+      parent.error(throwable);
+    }
+
+    @Override
+    ExecStream asParent() {
+      return this;
+    }
   }
 
   private static class TerminalExecStream extends ExecStream {
@@ -492,7 +577,7 @@ public class DefaultExecution implements Execution {
           if (segments.isEmpty()) {
             segments = null;
           }
-          segment.execute();
+          Objects.requireNonNull(segment).execute();
           return true;
         }
       } else {
@@ -547,87 +632,58 @@ public class DefaultExecution implements Execution {
 
     @Override
     void error(Throwable throwable) {
-      execStream = parent;
       if (resumed && resumer == null) {
-        parent.error(throwable);
+        execStream = parent;
+        execStream.error(throwable);
       } else {
-        try {
-          onError.execute(throwable);
-        } catch (Throwable e) {
-          execStream.error(e);
-        }
+        execStream = new SingleEventExecStream(parent, parent::error, continuation -> continuation.resume(() -> onError.execute(throwable)));
+        drain();
       }
     }
   }
 
-  private class MultiEventExecStream extends BaseExecStream implements ContinuationStream {
-    final ExecStream parent;
+  private class MultiEventExecStream extends NonUserCodeExecStream {
+    final Queue<ExecStream> events = PlatformDependent.newMpscQueue();
+
+    final ExecStream nextEvent = new NonUserCodeExecStream(this);
     private final Action<? super Throwable> onError;
-    final Queue<Queue<Block>> events = PlatformDependent.newMpscQueue();
-    private final AtomicReference<Block> complete = new AtomicReference<>();
 
     MultiEventExecStream(ExecStream parent, Action<? super Throwable> onError, Action<? super ContinuationStream> initial) {
-      this.parent = parent;
+      super(parent);
       this.onError = onError;
-      event(() -> initial.execute(this));
-    }
-
-    public boolean event(Block action) {
-      if (complete.get() == null) {
-        Queue<Block> event = new ArrayDeque<>();
-        event.add(action);
-        events.add(event);
-        drain();
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    public boolean complete(Block action) {
-      if (complete.compareAndSet(null, action)) {
-        drain();
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    @Override
-    boolean exec() throws Exception {
-      Block nextSegment = events.peek().poll();
-      if (nextSegment == null) {
-        if (events.size() == 1) {
-          if (complete.get() == null) {
-            return false;
-          } else {
-            execStream = parent;
-            complete.get().execute();
-            return true;
+      events.add(new SingleEventExecStream(nextEvent, Action.throwException(), continuation -> continuation.resume(() ->
+        initial.execute(new ContinuationStream() {
+          public void event(Block action) {
+            addEvent(nextEvent, action);
           }
-        } else {
-          events.poll();
-          return true;
-        }
-      } else {
-        nextSegment.execute();
-        return true;
-      }
+
+          public void complete(Block action) {
+            addEvent(new NonUserCodeExecStream(parent), action);
+          }
+
+          private void addEvent(ExecStream parent, Block action) {
+            events.add(new SingleEventExecStream(parent, Action.throwException(), continuation -> continuation.resume(action)));
+            drain();
+          }
+        })
+      )));
     }
 
     @Override
-    void enqueue(Block segment) {
-      events.peek().add(segment);
+    boolean exec() {
+      ExecStream next = events.poll();
+      if (next == null) {
+        return false;
+      } else {
+        execStream = next;
+        return true;
+      }
     }
 
     @Override
     void error(Throwable throwable) {
-      execStream = parent;
-      try {
-        onError.execute(throwable);
-      } catch (Exception e) {
-        execStream.error(e);
-      }
+      execStream = new SingleEventExecStream(parent, parent::error, continuation -> continuation.resume(() -> onError.execute(throwable)));
+      drain();
     }
   }
 

@@ -19,8 +19,8 @@ package ratpack.exec
 import ratpack.exec.internal.ExecThreadBinding
 import ratpack.func.Action
 import ratpack.test.exec.ExecHarness
+import ratpack.test.internal.BaseRatpackSpec
 import spock.lang.AutoCleanup
-import spock.lang.Specification
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import static ratpack.func.Action.throwException
 
 @SuppressWarnings("ChangeToOperator")
-class PromiseOperationsSpec extends Specification {
+class PromiseOperationsSpec extends BaseRatpackSpec {
 
   @AutoCleanup
   ExecHarness execHarness = ExecHarness.harness()
@@ -40,9 +40,9 @@ class PromiseOperationsSpec extends Specification {
       .controller.fork()
       .onError(onError)
       .onComplete {
-      events << "complete"
-      latch.countDown()
-    }.start {
+        events << "complete"
+        latch.countDown()
+      }.start {
       action.execute(it)
     }
 
@@ -129,6 +129,44 @@ class PromiseOperationsSpec extends Specification {
 
     then:
     events == [ex, "complete"]
+  }
+
+  def "can flatOp on complete signal"() {
+    when:
+    exec { e ->
+      Blocking.get { 1 }
+        .map { i -> null }
+        .route({ it == null }, { events << "routed" })
+        .flatOp { i -> events << "flatOp1"; Operation.of { events << "flatOp2" } }
+        .promise()
+        .transform({ up ->
+          { down ->
+            up.connect(new Downstream<Void>() {
+              @Override
+              void success(Void value) {
+                events << "success"
+                down.success(value)
+              }
+
+              @Override
+              void error(Throwable throwable) {
+                events << "error"
+                down.error(throwable)
+              }
+
+              @Override
+              void complete() {
+                events << "complete-signal"
+                down.complete()
+              }
+            })
+          } as Upstream<Void>
+        })
+        .then { events << "then" }
+    }
+
+    then:
+    events == ["routed", "complete-signal", "complete"]
   }
 
   def "can terminate null"() {
@@ -311,8 +349,8 @@ class PromiseOperationsSpec extends Specification {
     when:
     exec {
       Promise.value(1)
-      .flatOp { i -> Operation.of { events << "op:$i" } }
-      .then()
+        .flatOp { i -> Operation.of { events << "op:$i" } }
+        .then()
     }
 
     then:
@@ -324,18 +362,18 @@ class PromiseOperationsSpec extends Specification {
     exec {
       Promise.value("foo")
         .nextOpIf({ it.startsWith("f") }) {
-        Operation.of {
-          events << "one"
+          Operation.of {
+            events << "one"
+          }
         }
-      }
-      .nextOpIf({ it.startsWith("aaa") }) {
-        Operation.of {
-          events << "two"
+        .nextOpIf({ it.startsWith("aaa") }) {
+          Operation.of {
+            events << "two"
+          }
         }
-      }
-      .then {
-        events << it
-      }
+        .then {
+          events << it
+        }
     }
 
     then:

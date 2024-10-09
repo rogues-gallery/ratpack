@@ -13,77 +13,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-buildscript {
-  repositories {
-    gradlePluginPortal()
-  }
-
-  dependencies {
-    classpath "com.gradle:build-scan-plugin:2.1"
-  }
-}
-
-apply plugin: com.gradle.scan.plugin.BuildScanPlugin
-
 def env = System.getenv()
-def publishToSlack = findProperty("publishToSlack") != null
+def publishToSlack = gradle.startParameter.projectProperties.publishToSlack != null
+def ci = System.getenv("CI")
 
-buildScan {
-  background {
-    def commitId = env.REVISION
-    try {
-      commitId = 'git rev-parse --verify HEAD'.execute().text.trim()
-    } catch (ignore) {
-      // ignore
-    }
-
-    if (commitId) {
-      link "Source", "https://github.com/ratpack/ratpack/tree/" + commitId
-    }
-  }
-}
-
-if (project.isCi) {
-
+develocity {
+  server = "https://ge.ratpack.io"
   buildScan {
-    termsOfServiceUrl = 'https://gradle.com/terms-of-service'
-    termsOfServiceAgree = 'yes'
+    uploadInBackground = !ci
+    publishing.onlyIf { it.authenticated }
 
-    publishAlways()
-    tag "CI"
-
-    def buildLink
-    def buildTitle
-
-    if (isSemaphore) {
-      buildLink = "https://semaphoreci.com/ratpack/ratpack/branches/${env.BRANCH_NAME.replace('.', '-')}/builds/${env.SEMAPHORE_BUILD_NUMBER}"
-      buildTitle = "${env.SEMAPHORE_PROJECT_NAME}/${env.BRANCH_NAME}/#${env.SEMAPHORE_BUILD_NUMBER}"
-    }
-
-    if (isCircleCI) {
-      buildLink = env.CIRCLE_BUILD_URL
-      buildTitle = "${env.CIRCLE_PROJECT_REPONAME}/${env.CIRCLE_BRANCH}/#${env.CIRCLE_BUILD_NUM}"
-    }
-
-    if (isCloudCi) {
+    if (env.CIRCLE_BUILD_URL) {
+      def buildLink = env.CIRCLE_BUILD_URL
+      def buildTitle = "${env.CIRCLE_PROJECT_REPONAME}/${env.CIRCLE_BRANCH}/#${env.CIRCLE_BUILD_NUM}"
       link "CI", buildLink
-    }
 
-    if (publishToSlack) {
-      buildFinished { buildResult ->
+      if (publishToSlack) {
+        buildFinished { buildResult ->
 
-        buildScanPublished {
-          def json="{'attachments': [{'fallback': '${buildTitle}', 'color': '${buildResult.failure != null ? 'danger' : 'good'}', 'title': '${buildTitle}', 'title_link': '${buildLink}', 'text': 'Build scan: ${it.buildScanUri}'}]}"
-          ['curl', '-s', '-d', "payload=$json", "https://hooks.slack.com/services/${env.SLACK_TOKEN}"].execute()
+          buildScanPublished {
+            def json = "{'attachments': [{'fallback': '${buildTitle}', 'color': '${buildResult.failure != null ? 'danger' : 'good'}', 'title': '${buildTitle}', 'title_link': '${buildLink}', 'text': 'Build scan: ${it.buildScanUri}'}]}"
+            ['curl', '-s', '-d', "payload=$json", "https://hooks.slack.com/services/${env.SLACK_TOKEN}"].execute()
+          }
+
         }
-
       }
     }
 
     // Capture individual issues for some reports
     gradle.taskGraph.afterTask { Task task, TaskState state ->
       if (task instanceof Checkstyle) {
-        if (state.failure && task.reports.xml.destination.exists()) {
+        if (state.failure && task.reports.xml.outputLocation.get().asFile.exists()) {
           def checkstyle = new XmlSlurper().parse(task.reports.xml.destination)
           def errors = checkstyle.file.collect {
             String filePath = task.project.rootProject.relativePath(it.@name.text())
@@ -92,9 +52,9 @@ if (project.isCi) {
           errors.each { task.project.buildScan.value 'Checkstyle Issue', it }
         }
       }
-      if (task instanceof CodeNarc && task.reports.xml.destination.exists()) {
+      if (task instanceof CodeNarc && task.reports.xml.outputLocation.get().asFile.exists()) {
         if (state.failure) {
-          def codenarc = new XmlSlurper().parse(task.reports.xml.destination)
+          def codenarc = new XmlSlurper().parse(task.reports.xml.outputLocation.get().asFile.exists())
           def errors = codenarc.Package.collect {
             it.File.collect {
               String filePath = task.project.rootProject.relativePath(it.@name.text())
@@ -107,3 +67,4 @@ if (project.isCi) {
     }
   }
 }
+

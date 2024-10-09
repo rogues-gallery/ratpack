@@ -18,6 +18,7 @@ package ratpack.websocket
 
 import groovy.transform.CompileStatic
 import org.java_websocket.client.WebSocketClient
+import org.java_websocket.framing.Framedata
 import org.java_websocket.handshake.ServerHandshake
 
 import java.util.concurrent.CountDownLatch
@@ -27,7 +28,9 @@ import java.util.concurrent.TimeUnit
 @CompileStatic
 class RecordingWebSocketClient extends WebSocketClient {
 
-  final LinkedBlockingQueue<String> received = new LinkedBlockingQueue<String>()
+  final LinkedBlockingQueue<String> receivedText = new LinkedBlockingQueue<String>()
+  final LinkedBlockingQueue<Framedata> receivedFragments = new LinkedBlockingQueue<Framedata>()
+
   Exception exception
   int closeCode
   String closeReason
@@ -46,8 +49,13 @@ class RecordingWebSocketClient extends WebSocketClient {
   }
 
   @Override
+  void onWebsocketPong(org.java_websocket.WebSocket conn, Framedata f) {
+    receivedFragments.put f
+  }
+
+  @Override
   void onMessage(String message) {
-    received.put message
+    receivedText.put message
   }
 
   @Override
@@ -59,7 +67,7 @@ class RecordingWebSocketClient extends WebSocketClient {
   }
 
   void waitForClose() {
-    assert closeLatch.await(5, TimeUnit.SECONDS) : "websocket connection did not close"
+    assert closeLatch.await(5, TimeUnit.SECONDS): "websocket connection did not close"
   }
 
   @Override

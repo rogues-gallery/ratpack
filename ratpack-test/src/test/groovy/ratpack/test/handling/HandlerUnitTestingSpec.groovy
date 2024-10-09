@@ -18,28 +18,28 @@ package ratpack.test.handling
 
 import com.google.common.net.HostAndPort
 import io.netty.util.CharsetUtil
-import ratpack.error.ServerErrorHandler
+import ratpack.core.error.ServerErrorHandler
 import ratpack.exec.Blocking
-import ratpack.form.Form
-import ratpack.form.UploadedFile
+import ratpack.core.form.Form
+import ratpack.core.form.UploadedFile
 import ratpack.func.Action
 import ratpack.groovy.internal.ClosureUtil
 import ratpack.groovy.test.handling.GroovyRequestFixture
-import ratpack.handling.Context
-import ratpack.handling.Handler
-import ratpack.handling.RequestOutcome
-import ratpack.registry.Registry
+import ratpack.core.handling.Context
+import ratpack.core.handling.Handler
+import ratpack.core.handling.RequestOutcome
+import ratpack.exec.registry.Registry
 import ratpack.test.http.MultipartFormSpec
-import spock.lang.Specification
+import ratpack.test.internal.BaseRatpackSpec
 import spock.util.concurrent.BlockingVariable
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 import static ratpack.groovy.Groovy.groovyHandler
-import static ratpack.handling.Handlers.chain
+import static ratpack.core.handling.Handlers.chain
 
-class HandlerUnitTestingSpec extends Specification {
+class HandlerUnitTestingSpec extends BaseRatpackSpec {
 
   GroovyRequestFixture fixture = GroovyRequestFixture.requestFixture()
 
@@ -459,7 +459,7 @@ class HandlerUnitTestingSpec extends Specification {
     then:
     result.sentResponse
     result.status.code == 302
-    result.headers.location == "http://localhost:5050/foo"
+    result.headers.location == "/foo"
   }
 
   def "can get remote host and port"() {

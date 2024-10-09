@@ -17,17 +17,23 @@
 apply from: "$rootDir/gradle/groovyModule.gradle"
 
 dependencies {
-  compile project(":ratpack-groovy-test")
-  compile commonDependencies.spock
-  compile 'org.java-websocket:Java-WebSocket:1.3.8'
-  compile 'cglib:cglib-nodep:3.1'
-  compile commonDependencies.commonsLang3
-  compile gradleTestKit()
+  api project(":ratpack-groovy-test")
+  api commonDependencies.spock
+  api 'org.java-websocket:Java-WebSocket:1.5.3'
+  api "org.junit.jupiter:junit-jupiter-api:5.8.2"
+  api("org.apiguardian:apiguardian-api:1.1.2") {
+    because "Needed after upgrading to junit-jupiter-api:5.8.2, otherwise javadoc snippet tests fail. Somehow related to https://github.com/junit-team/junit5/issues/1104"
+  }
+  implementation 'cglib:cglib-nodep:3.3.0'
+  implementation commonDependencies.commonsLang3
+  implementation "org.apache.commons:commons-text:1.9"
+  implementation "org.codehaus.groovy:groovy-ant:${commonVersions.groovy}"
+  implementation "org.codehaus.groovy:groovy-test-junit5:${commonVersions.groovy}"
 
-  runtime "org.apache.logging.log4j:log4j-slf4j-impl:${commonVersions.log4j}", {
+  runtimeOnly "org.apache.logging.log4j:log4j-slf4j-impl:${commonVersions.log4j}", {
     exclude group: "org.slf4j", module: "slf4j-api"
   }
-  runtime "org.apache.logging.log4j:log4j-api:${commonVersions.log4j}"
-  runtime "org.apache.logging.log4j:log4j-core:${commonVersions.log4j}"
-  runtime 'com.lmax:disruptor:3.3.2'
+  runtimeOnly "org.apache.logging.log4j:log4j-api:${commonVersions.log4j}"
+  runtimeOnly "org.apache.logging.log4j:log4j-core:${commonVersions.log4j}"
+  runtimeOnly 'com.lmax:disruptor:3.4.4'
 }

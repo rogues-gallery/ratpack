@@ -15,32 +15,29 @@
  */
 package ratpack.spring;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static ratpack.groovy.Groovy.groovyMarkupTemplate;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.test.IntegrationTest;
-import org.springframework.boot.test.SpringApplicationConfiguration;
-import org.springframework.boot.test.TestRestTemplate;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import ratpack.groovy.template.MarkupTemplateModule;
-import ratpack.handling.Context;
-import ratpack.handling.Handler;
-import ratpack.server.RatpackServer;
-import ratpack.spring.MarkupTests.Application;
+import ratpack.core.handling.Context;
+import ratpack.core.handling.Handler;
+import ratpack.core.server.RatpackServer;
 import ratpack.spring.config.EnableRatpack;
 import ratpack.spring.config.RatpackProperties;
 
-@RunWith(SpringJUnit4ClassRunner.class)
-@SpringApplicationConfiguration(classes = Application.class)
-@IntegrationTest("server.port=0")
+@ExtendWith(SpringExtension.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class MarkupTests {
 
   private TestRestTemplate restTemplate = new TestRestTemplate();
@@ -51,7 +48,7 @@ public class MarkupTests {
   @Test
   public void contextLoads() {
     String body = restTemplate.getForObject("http://localhost:" + server.getBindPort(), String.class);
-    assertTrue("Wrong body" + body, body.contains("<body>Home"));
+    assertTrue(body.contains("<body>Home"), "Wrong body" + body);
   }
 
   @Configuration

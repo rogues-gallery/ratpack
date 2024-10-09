@@ -18,13 +18,13 @@ package ratpack.retrofit;
 
 import io.netty.buffer.Unpooled;
 import okhttp3.Request;
-import ratpack.http.Status;
-import ratpack.http.client.ReceivedResponse;
-import ratpack.http.client.internal.DefaultReceivedResponse;
-import ratpack.http.internal.ByteBufBackedTypedData;
-import ratpack.http.internal.DefaultMediaType;
+import ratpack.core.http.Status;
+import ratpack.core.http.client.ReceivedResponse;
+import ratpack.core.http.client.internal.DefaultReceivedResponse;
+import ratpack.core.http.internal.ByteBufBackedTypedData;
+import ratpack.core.http.internal.DefaultMediaType;
 import ratpack.retrofit.internal.OkHttpHeadersBackedHeaders;
-import ratpack.util.Exceptions;
+import ratpack.func.Exceptions;
 import retrofit2.Call;
 import retrofit2.Response;
 
@@ -39,20 +39,8 @@ public class RatpackRetrofitCallException extends Exception {
   private final Response<?> response;
 
   /**
-   * Create a wrapped Retrofit exception
-   * @param call the Retrofit {@link Call} to wrap.
-   * @param error the error message
-   * @deprecated since 1.6.0
-   * @see #RatpackRetrofitCallException(Request, Response)
-   */
-  @Deprecated
-  public RatpackRetrofitCallException(Call<?> call, String error) {
-    super(call.request().url().toString() + ": " + error);
-    this.response = null;
-  }
-
-  /**
-   * Create a wrapped Retrofit exception
+   * Create a wrapped Retrofit exception.
+   *
    * @param request the Retrofit {@link Request} that initiated HTTP request.
    * @param response the underlying Retrofit {@link Response} from the HTTP request.
    * @since 1.6.0
@@ -63,7 +51,7 @@ public class RatpackRetrofitCallException extends Exception {
       if (charset == null) {
         charset = Charset.forName("UTF-8");
       }
-      return response.errorBody().source().buffer().clone().readString(charset);
+      return response.errorBody().source().getBuffer().clone().readString(charset);
     }));
     this.response = response;
   }
@@ -71,6 +59,7 @@ public class RatpackRetrofitCallException extends Exception {
   /**
    * Get the underlying response that resulted in the exception for this HTTP request.
    * This is useful for mapping the exception based on the response information.
+   *
    * @return The response for the HTTP call.
    * @since 1.6.0
    */
@@ -79,7 +68,7 @@ public class RatpackRetrofitCallException extends Exception {
       Status.of(response.code(), response.message()),
       new OkHttpHeadersBackedHeaders(response.headers()),
       new ByteBufBackedTypedData(
-        Unpooled.wrappedBuffer(Exceptions.uncheck(() -> response.errorBody().source().buffer().clone().readByteArray())),
+        Unpooled.wrappedBuffer(Exceptions.uncheck(() -> response.errorBody().source().getBuffer().clone().readByteArray())),
         DefaultMediaType.get(response.errorBody().contentType() != null ? response.errorBody().contentType().toString() : null)
       )
     );

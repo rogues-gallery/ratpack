@@ -21,8 +21,8 @@ import org.springframework.beans.factory.FactoryBean
 import org.springframework.beans.factory.support.BeanDefinitionBuilder
 import org.springframework.context.support.StaticApplicationContext
 import ratpack.func.Action
-import ratpack.registry.Registry
-import ratpack.registry.RegistrySpec
+import ratpack.exec.registry.Registry
+import ratpack.exec.registry.RegistrySpec
 import ratpack.test.internal.registry.RegistryContractSpec
 
 import java.util.function.Supplier

@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /*
-    As defined in RFC 1867 and 2388 (see https://tools.ietf.org/html/rfc1867)
+    As defined in RFC 1867 and 2388 (see https://datatracker.ietf.org/html/rfc1867)
  */
 public class DefaultMultipartForm {
 
@@ -76,7 +76,7 @@ public class DefaultMultipartForm {
 
     private void addFields(Map<String, Set<String>> fields, String boundary, StringBuilder out) {
       fields.forEach((name, values) -> {
-        values.forEach((value) -> {
+        values.forEach(value -> {
           openBoundary(boundary, out);
           declareField(name, out);
           data(value.getBytes(), out);
@@ -100,7 +100,7 @@ public class DefaultMultipartForm {
 
       declareField(name, out);
       type(String.format("multipart/mixed, boundary=%s\n", subBoundary), out);
-      files.forEach((file) -> {
+      files.forEach(file -> {
         openBoundary(subBoundary, out);
         disposition(String.format("attachment; filename=\"%s\"", file.getName()), out);
         file(file, out);
@@ -387,8 +387,8 @@ public class DefaultMultipartForm {
       .collect(Collectors.toList());
 
     static boolean isValid(String value) {
-      return VALUES.stream().anyMatch((constant)
-        -> value.equalsIgnoreCase(constant) || value.toUpperCase().startsWith("X-"));
+      return VALUES.stream().anyMatch(constant ->
+        value.equalsIgnoreCase(constant) || value.toUpperCase().startsWith("X-"));
     }
 
   }

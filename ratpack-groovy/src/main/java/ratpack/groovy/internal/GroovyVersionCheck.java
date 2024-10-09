@@ -18,7 +18,7 @@ package ratpack.groovy.internal;
 
 import com.google.common.base.Charsets;
 import com.google.common.io.Resources;
-import ratpack.api.Nullable;
+import ratpack.func.Nullable;
 
 import java.io.IOException;
 import java.net.URL;
@@ -53,8 +53,8 @@ public class GroovyVersionCheck {
       int minor = groupAsInt(matcher, 2);
       int patch = groupAsInt(matcher, 3);
       if (major > minimumMajor
-        || (major == minimumMajor && minor > minimumMinor)
-        || (major == minimumMajor && minor == minimumMinor && patch >= minimumPatch)) {
+        || major == minimumMajor && minor > minimumMinor
+        || major == minimumMajor && minor == minimumMinor && patch >= minimumPatch) {
         return;
       }
     }

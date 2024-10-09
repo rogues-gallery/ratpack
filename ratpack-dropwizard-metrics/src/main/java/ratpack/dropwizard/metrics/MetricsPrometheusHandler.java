@@ -21,8 +21,8 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufOutputStream;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
-import ratpack.handling.Context;
-import ratpack.handling.Handler;
+import ratpack.core.handling.Context;
+import ratpack.core.handling.Handler;
 
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -34,9 +34,9 @@ import java.io.Writer;
  * This handler should be bound to an application path, and most likely only for the GET method…
  * <pre class="java-chain-dsl">
  * import ratpack.dropwizard.metrics.MetricsPrometheusHandler;
- * import static org.junit.Assert.*;
+ * import static org.junit.jupiter.api.Assertions.*;
  *
- * assertTrue(chain instanceof ratpack.handling.Chain);
+ * assertTrue(chain instanceof ratpack.core.handling.Chain);
  * chain.get("admin/metrics", new MetricsPrometheusHandler());
  * </pre>
  *

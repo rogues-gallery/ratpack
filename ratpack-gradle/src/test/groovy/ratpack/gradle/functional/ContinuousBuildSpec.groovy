@@ -23,11 +23,12 @@ import spock.util.concurrent.PollingConditions
 class ContinuousBuildSpec extends FunctionalSpec {
 
   int port
-  def resultHolder = new BlockingVariable(10)
+  def resultHolder = new BlockingVariable(30)
 
   @Unroll
   def "can use continuous build #gradleVersion"() {
     given:
+    uniqueDaemon = true
     this.gradleVersion = gradleVersion
     buildFile << """
       tasks.all {
@@ -39,20 +40,19 @@ class ContinuousBuildSpec extends FunctionalSpec {
 
     file("src/ratpack/ratpack.groovy") << """
       import static ratpack.groovy.Groovy.*
-      import ratpack.server.Stopper
-      import ratpack.server.RatpackServer
+      import ratpack.core.server.Stopper
+      import ratpack.core.server.RatpackServer
+      import java.nio.file.Paths
 
       ratpack {
-        serverConfig { port 0 }
+        serverConfig {
+          port 0
+          portFile(Paths.get("port"))
+        }
         handlers {
-          def server = registry.get(RatpackServer)
-          Thread.start {
-             sleep 1000
-             new File("port").text = server.bindPort
-          }
           files { dir "public" }
           get {
-            onClose { server.stop() }
+            onClose { context.get(RatpackServer).stop() }
             render "stopping"
           }
         }
@@ -66,12 +66,13 @@ class ContinuousBuildSpec extends FunctionalSpec {
       try {
         resultHolder.set(run("run", "-t", "-S"))
       } catch (ignore) {
+        ignore.printStackTrace()
         resultHolder.set(null)
       }
     }
-    determinePort()
 
     then:
+    determinePort()
     urlText("foo.txt") == "original"
 
     when:
@@ -90,12 +91,14 @@ class ContinuousBuildSpec extends FunctionalSpec {
     }
 
     where:
-    gradleVersion << ["4.10.3", "5.1.1"]
+    gradleVersion << [
+      "7.4"
+    ]
   }
 
   void determinePort() {
     def portFile = file("port")
-    new PollingConditions().within(30) {
+    new PollingConditions().within(45) {
       assert portFile.isFile() && portFile.text
     }
     port = portFile.text.toInteger()

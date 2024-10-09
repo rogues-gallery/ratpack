@@ -17,10 +17,9 @@
 package ratpack.test.exec;
 
 import ratpack.exec.*;
-import ratpack.exec.internal.DefaultExecController;
 import ratpack.func.Action;
 import ratpack.func.Function;
-import ratpack.registry.RegistrySpec;
+import ratpack.exec.registry.RegistrySpec;
 import ratpack.test.exec.internal.DefaultExecHarness;
 
 /**
@@ -45,7 +44,7 @@ public interface ExecHarness extends AutoCloseable {
    * import ratpack.test.exec.ExecHarness;
    * import ratpack.exec.ExecResult;
    *
-   * import static org.junit.Assert.assertEquals;
+   * import static org.junit.jupiter.api.Assertions.assertEquals;
    *
    * public class Example {
    *
@@ -87,18 +86,24 @@ public interface ExecHarness extends AutoCloseable {
    *   }
    * }
    * }</pre>
-   *
+   * <p>
    * When using Ratpack's RxJava integration, ExecHarness can be used to test {@code rx.Observable} instances by first converting them to a promise.
    * See the {@code ratpack.rx2.RxRatpack.single(Observable)} documentation for an example of testing observables.
    *
    * @return a new execution harness
    */
   static ExecHarness harness() {
-    return new DefaultExecHarness(new DefaultExecController());
+    return new DefaultExecHarness(ExecController.builder().build());
   }
 
+  /**
+   * Create a harness with the provided number of computation threads.
+   *
+   * @param numThreads the number of computation threads
+   * @return an execution harness
+   */
   static ExecHarness harness(int numThreads) {
-    return new DefaultExecHarness(new DefaultExecController(numThreads));
+    return new DefaultExecHarness(ExecController.builder().numThreads(numThreads).build());
   }
 
   default ExecStarter fork() {
@@ -119,7 +124,7 @@ public interface ExecHarness extends AutoCloseable {
    * @throws Exception any thrown by the function
    */
   default <T> ExecResult<T> yield(Function<? super Execution, ? extends Promise<T>> func) throws Exception {
-    return yield(Action.noop(), func);
+    return this.yield(Action.noop(), func);
   }
 
   /**
@@ -167,7 +172,7 @@ public interface ExecHarness extends AutoCloseable {
 
   /**
    * Initiates an execution and blocks until it completes.
-   *
+   * <p>
    * If an uncaught exception is thrown during the execution, it will be thrown by this method.
    * <p>
    * This method is useful for testing an execution that has some detectable side effect, as this method does not return the “result” of the execution.
@@ -183,7 +188,7 @@ public interface ExecHarness extends AutoCloseable {
 
   /**
    * Initiates an execution and blocks until it completes.
-   *
+   * <p>
    * If an uncaught exception is thrown during the execution, it will be thrown by this method.
    * <p>
    * This method is useful for testing an execution that has some detectable side effect, as this method does not return the “result” of the execution.
@@ -226,7 +231,11 @@ public interface ExecHarness extends AutoCloseable {
   }
 
   default void execute(Function<? super Execution, ? extends Operation> function) throws Exception {
-    yield(e -> function.apply(e).promise()).getValueOrThrow();
+    this.yield(e -> function.apply(e).promise()).getValueOrThrow();
+  }
+
+  default void execute(Action<? super RegistrySpec> registry, Function<? super Execution, ? extends Operation> function) throws Exception {
+    this.yield(registry, e -> function.apply(e).promise()).getValueOrThrow();
   }
 
   default void execute(Operation operation) throws Exception {
@@ -236,6 +245,12 @@ public interface ExecHarness extends AutoCloseable {
   static void executeSingle(Function<? super Execution, ? extends Operation> function) throws Exception {
     try (ExecHarness harness = harness()) {
       harness.execute(function);
+    }
+  }
+
+  static void executeSingle(Action<? super RegistrySpec> registry, Function<? super Execution, ? extends Operation> function) throws Exception {
+    try (ExecHarness harness = harness()) {
+      harness.execute(registry, function);
     }
   }
 

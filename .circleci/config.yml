@@ -5,47 +5,51 @@
 defaults: &defaults
   working_directory: ~/ratpack
   docker:
-    - image: circleci/openjdk:8-jdk
+    - image: cimg/openjdk:11.0
+  resource_class: large
   environment:
     TERM: dumb
-    _JAVA_OPTIONS: -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap
-    GRADLE_OPTS: -Dorg.gradle.parallel.intra=true -Dorg.gradle.jvmargs="-Xmx1g"
-    JRUBY_OPTS: -Xmx512m
+    GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx1g"
 
 version: 2
 jobs:
+  sanity-check:
+    <<: *defaults
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v4-gradle-{{ .Branch }}-{{ .Revision }}
+            - v4-gradle-{{ .Branch }}
+            - v4-gradle-master
+            - v4-gradle
+            -
+      - run:
+          name: Run
+          command: ./gradlew sanityCheck --continue --max-workers=3 --build-cache
+
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: v4-gradle-{{ .Branch }}-{{ .Revision }}
+          when: always
+
+      - persist_to_workspace:
+          root: ~/ratpack
+          paths:
+            - "*/build/**"
   build:
     <<: *defaults
     steps:
       - checkout
 
-      # Download and cache dependencies
-      - restore_cache:
-          keys:
-            - v1-gradle-{{ .Branch }}-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "gradle/dependencies.gradle" }}
-            - v1-gradle-{{ .Branch }}-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}
-            - v1-gradle-{{ .Branch }}
-            - v1-gradle-master
-            - v1-gradle
+      - attach_workspace:
+          at: ~/ratpack
 
       - run:
-          name: Download Gradle Dependencies
-          command: ./gradlew downloadDependencies
-
-      # run sanity check
-      - run:
-          name: Run Sanity Check
-          command: ./gradlew sanityCheck --max-workers=2
-
-      - save_cache:
-          paths:
-            - ~/.gradle
-            - ~/.jruby-container
-          key: v1-gradle-{{ .Branch }}-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "gradle/dependencies.gradle" }}
-
-      - run:
-          name: Test & Build
-          command: ./gradlew :ratpack-gradle:check :ratpack-site:check :ratpack-core:check build jacocoReport --continue --max-workers=2 -PpublishToSlack
+          name: Run
+          command: ./gradlew build jacocoReport -PjacocoReport --continue --max-workers=3 --build-cache -PpublishToSlack
 
       - run:
           name: Save test results
@@ -62,13 +66,10 @@ jobs:
       - store_test_results:
           path: ~/junit
 
-      - store_artifacts:
-          path: ~/junit
-
       - persist_to_workspace:
           root: ~/ratpack
           paths:
-            - build/*
+            - "*/build/**"
 
   uploadArtifacts:
     <<: *defaults
@@ -80,7 +81,7 @@ jobs:
 
       - run:
           name: Upload Artifacts
-          command: ./gradlew --max-workers=1 artifactoryPublish -PbuildInfo.build.number=${CIRCLE_BUILD_NUM}
+          command: ./gradlew publishToSonatypeOss --max-workers=1
 
   deploySite:
     <<: *defaults
@@ -88,17 +89,23 @@ jobs:
       - checkout
 
       - attach_workspace:
-          at: ~/build
+          at: ~/ratpack
 
       - run:
           name: Deploy Site
-          command: ./gradlew --max-workers=1 :ratpack-site:deployToHeroku
+          command: ./gradlew :ratpack-site:deployToHeroku --max-workers=1 --build-cache
 
 workflows:
   version: 2
   build_and_publish:
     jobs:
+      - sanity-check:
+          filters:
+            branches:
+              ignore: gh-pages
       - build:
+          requires:
+            - sanity-check
           filters:
             branches:
               ignore: gh-pages

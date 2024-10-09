@@ -27,21 +27,21 @@ import groovy.json.JsonSlurper
 import io.netty.buffer.ByteBufAllocator
 import io.netty.buffer.PooledByteBufAllocator
 import io.netty.buffer.UnpooledByteBufAllocator
-import org.junit.Rule
-import org.junit.rules.TemporaryFolder
 import org.slf4j.Logger
 import ratpack.dropwizard.metrics.internal.PooledByteBufAllocatorMetricSet
 import ratpack.dropwizard.metrics.internal.UnpooledByteBufAllocatorMetricSet
-import ratpack.error.ServerErrorHandler
-import ratpack.error.internal.DefaultDevelopmentErrorHandler
+import ratpack.core.error.ServerErrorHandler
+import ratpack.core.error.internal.DefaultDevelopmentErrorHandler
 import ratpack.exec.Blocking
-import ratpack.exec.ExecController
+import ratpack.exec.Execution
 import ratpack.exec.Promise
 import ratpack.groovy.handling.GroovyChain
 import ratpack.groovy.test.embed.GroovyEmbeddedApp
-import ratpack.http.client.HttpClient
+import ratpack.core.http.client.HttpClient
 import ratpack.test.embed.EmbeddedApp
 import ratpack.test.internal.RatpackGroovyDslSpec
+import ratpack.test.internal.spock.TempDir
+import ratpack.test.internal.spock.TemporaryFolder
 import ratpack.websocket.RecordingWebSocketClient
 import spock.lang.AutoCleanup
 import spock.util.concurrent.BlockingVariable
@@ -56,7 +56,7 @@ class MetricsSpec extends RatpackGroovyDslSpec {
   @SuppressWarnings("GroovyUnusedDeclaration")
   PollingConditions polling = new PollingConditions()
 
-  @Rule
+  @TempDir
   TemporaryFolder reportDirectory
 
   @AutoCleanup
@@ -101,16 +101,16 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     System.out = new PrintStream(output, true)
 
     def log = Mock(Logger) {
-      info(_, _, _) >> { args ->
+      info(_, _) >> { args ->
         println args
       }
 
       isInfoEnabled(_) >> {
-        return  true
+        return true
       }
     }
     def graphite = Mock(GraphiteSender) {
-      send(_,_,_) >> {args -> println(args)}
+      send(_, _, _) >> { args -> println(args) }
       isConnected() >> true
       getFailures() >> 0
     }
@@ -213,10 +213,10 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     public AnnotatedMetricService triggerTimer3() { this }
 
     @Timed(name = 'foo.timer.promise', absolute = true)
-    public Promise<String> triggerTimerPromise() { Promise.sync{sleep(50); "resultPromise"} }
+    public Promise<String> triggerTimerPromise() { Promise.sync { sleep(50); "resultPromise" } }
 
-    @Timed(name = 'foo.timer.sync', absolute=true)
-    public String triggerTimerSync() {sleep(50); "resultSync"}
+    @Timed(name = 'foo.timer.sync', absolute = true)
+    public String triggerTimerSync() { sleep(50); "resultSync" }
 
   }
 
@@ -509,7 +509,7 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     client.connectBlocking()
 
     then:
-    with(new JsonSlurper().parseText(client.received.poll(2, TimeUnit.SECONDS))) {
+    with(new JsonSlurper().parseText(client.receivedText.poll(2, TimeUnit.SECONDS))) {
       timers.size() == 1
       timers.containsKey("root.get-requests")
       timers["root.get-requests"].count == 2
@@ -535,7 +535,7 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     2.times { getText() }
 
     then:
-    with(new JsonSlurper().parseText(client.received.poll(2, TimeUnit.SECONDS))) {
+    with(new JsonSlurper().parseText(client.receivedText.poll(2, TimeUnit.SECONDS))) {
       timers.size() == 1
       timers.containsKey("root.get-requests")
       timers["root.get-requests"].count == 4
@@ -604,7 +604,7 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     System.out = new PrintStream(output, true)
 
     def log = Mock(Logger) {
-      info(_, _, _) >> { args ->
+      info(_, _) >> { args ->
         println args
       }
 
@@ -614,7 +614,7 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     }
 
     def graphite = Mock(GraphiteSender) {
-      send(_,_,_) >> {args -> println(args)}
+      send(_, _, _) >> { args -> println(args) }
       isConnected() >> true
       getFailures() >> 0
     }
@@ -626,7 +626,7 @@ class MetricsSpec extends RatpackGroovyDslSpec {
         it.slf4j { it.logger(log).reporterInterval(Duration.ofSeconds(1)).prefix("test").includeFilter(".*ar.*").excludeFilter(".*bar.*") }
         it.jmx { it.includeFilter(".*ar.*") }
         it.csv { it.reportDirectory(reportDirectory.root).reporterInterval(Duration.ofSeconds(1)).includeFilter(".*foo.*") }
-        it.graphite {it.sender(graphite).prefix("graphite").reporterInterval(Duration.ofSeconds(1)).includeFilter(".*ar.*").excludeFilter(".*bar.*")}
+        it.graphite { it.sender(graphite).prefix("graphite").reporterInterval(Duration.ofSeconds(1)).includeFilter(".*ar.*").excludeFilter(".*bar.*") }
       }
     }
 
@@ -843,18 +843,17 @@ class MetricsSpec extends RatpackGroovyDslSpec {
 
   }
 
-  def "it should report http client metrics"() {
+  def "it should report http client metrics with pooling client"() {
     given:
     MetricRegistry registry
     String ok = 'ok'
     def result = new BlockingVariable<String>()
-    def httpClient = HttpClient.of { spec ->
-      spec.poolSize(0)
-      spec.enableMetricsCollection(true)
-    }
 
     bindings {
-      bindInstance(HttpClient, httpClient)
+      bindInstance(HttpClient, HttpClient.of {
+        it.poolSize(2)
+        it.enableMetricsCollection(true)
+      })
       module new DropwizardMetricsModule(), { spec ->
         spec.httpClient { config ->
           config
@@ -876,13 +875,12 @@ class MetricsSpec extends RatpackGroovyDslSpec {
 
     handlers { MetricRegistry metrics ->
       registry = metrics
-      get {
-        ExecController execController = it.get(ExecController)
-        execController.fork().start({
+      get { HttpClient httpClient ->
+        Execution.fork().start({
           httpClient.get(otherAppUrl())
             .then({ val ->
-            assert val.body.text == ok
-          })
+              assert val.body.text == ok
+            })
         })
         render ok
       }
@@ -894,11 +892,11 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     then:
     polling.within(2) {
       assert registry.getGauges().get('httpclient.total.active.connections').value == 1
-      assert registry.getGauges().get('httpclient.total.idle.connections').value == 0
-      assert registry.getGauges().get('httpclient.total.connections').value == 1
+      assert registry.getGauges().get('httpclient.total.idle.connections').value == 1
+      assert registry.getGauges().get('httpclient.total.connections').value == 2
       assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.active.connections").value == 1
-      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.idle.connections").value == 0
-      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.connections").value == 1
+      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.idle.connections").value == 1
+      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.connections").value == 2
 
 
     }
@@ -909,11 +907,11 @@ class MetricsSpec extends RatpackGroovyDslSpec {
     then:
     polling.within(2) {
       assert registry.getGauges().get('httpclient.total.active.connections').value == 0
-      assert registry.getGauges().get('httpclient.total.idle.connections').value == 0
-      assert registry.getGauges().get('httpclient.total.connections').value == 0
+      assert registry.getGauges().get('httpclient.total.idle.connections').value == 2
+      assert registry.getGauges().get('httpclient.total.connections').value == 2
       assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.active.connections").value == 0
-      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.idle.connections").value == 0
-      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.connections").value == 0
+      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.idle.connections").value == 2
+      assert registry.getGauges().get("httpclient.${otherAppUrl().host}.total.connections").value == 2
     }
   }
 }

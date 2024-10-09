@@ -17,37 +17,43 @@
 package ratpack.session.clientside
 
 import com.google.inject.AbstractModule
-import ratpack.http.MutableHeaders
-import ratpack.http.client.RequestSpec
-import ratpack.http.internal.HttpHeaderConstants
-import ratpack.server.ServerConfig
+import io.netty.handler.codec.http.cookie.Cookie
+import ratpack.core.http.MutableHeaders
+import ratpack.core.http.client.RequestSpec
+import ratpack.core.http.internal.HttpHeaderConstants
+import ratpack.core.server.ServerConfig
 import ratpack.session.Session
 import ratpack.session.SessionId
 import ratpack.session.SessionModule
 import ratpack.session.SessionSpec
+import ratpack.session.clientside.internal.DefaultCrypto
+import ratpack.exec.util.internal.InternalRatpackError
 
 import java.time.Duration
 
 class ClientSideSessionSpec extends SessionSpec {
 
-  private String[] getCookies(String startsWith, String path) {
-    getCookies(path).findAll { it.name().startsWith(startsWith)?.value }.toArray()
+  private List<Cookie> getCookies(String startsWith, String path) {
+    getCookies(path).findAll { it.name() ==~ /${startsWith}_\d+/ }
   }
 
   final static SUPPORTED_ALGORITHMS = [
     "Blowfish",
-    "AES/CBC/NoPadding",
     "AES/CBC/PKCS5Padding",
-    "AES/ECB/NoPadding",
     "AES/ECB/PKCS5Padding",
-    "DES/CBC/NoPadding",
     "DES/CBC/PKCS5Padding",
-    "DES/ECB/NoPadding",
     "DES/ECB/PKCS5Padding",
-    "DESede/CBC/NoPadding",
     "DESede/CBC/PKCS5Padding",
-    "DESede/ECB/NoPadding",
     "DESede/ECB/PKCS5Padding"
+  ]
+
+  final static UNSUPPORTED_ALGORITHMS = [
+    "AES/CBC/NoPadding",
+    "AES/ECB/NoPadding",
+    "DES/CBC/NoPadding",
+    "DES/ECB/NoPadding",
+    "DESede/CBC/NoPadding",
+    "DESede/ECB/NoPadding"
   ]
 
   static int keyLength(String algorithm) {
@@ -98,9 +104,9 @@ class ClientSideSessionSpec extends SessionSpec {
     get("foo")
 
     then:
-    getCookies("ratpack_session", "/").length == 0
-    getCookies("ratpack_session", "/bar").length == 1
-    getCookies("ratpack_session", "/foo").length == 0
+    getCookies("ratpack_session", "/").size() == 0
+    getCookies("ratpack_session", "/bar").size() == 1
+    getCookies("ratpack_session", "/foo").size() == 0
   }
 
   def "last access time is set and changed on load or on store"() {
@@ -118,12 +124,12 @@ class ClientSideSessionSpec extends SessionSpec {
     }
 
     then:
-    !get("nosessionaccess").headers.getAll("Set-Cookie").contains("ratpack_lat")
+    !get("nosessionaccess").headers.getAll("Set-Cookie").contains("ratpack_session_lat")
     def values = get("store").headers.getAll("Set-Cookie")
-    def value = values.find { it.contains("ratpack_lat") }
+    def value = values.find { it.contains("ratpack_session_lat") }
     value
     def values2 = get("load").headers.getAll("Set-Cookie")
-    def value2 = values2.find { it.contains("ratpack_lat") }
+    def value2 = values2.find { it.contains("ratpack_session_lat") }
     value2 != value
   }
 
@@ -142,13 +148,13 @@ class ClientSideSessionSpec extends SessionSpec {
     get("foo")
 
     then:
-    getCookies("ratpack_session", "/").length == 1
+    getCookies("ratpack_session", "/").size() == 1
 
     when:
     get("terminate")
 
     then:
-    getCookies("ratpack_session", "/").length == 0
+    getCookies("ratpack_session", "/").size() == 0
   }
 
   def "session partioned by max cookie size"() {
@@ -167,13 +173,13 @@ class ClientSideSessionSpec extends SessionSpec {
     get("foo")
 
     then:
-    getCookies("ratpack_session", "/").length == 2
+    getCookies("ratpack_session", "/").size() == 2
 
     when:
     get("bar")
 
     then:
-    getCookies("ratpack_session", "/").length == 1
+    getCookies("ratpack_session", "/").size() == 1
   }
 
   def "timed out session invalidates cookies"() {
@@ -198,16 +204,16 @@ class ClientSideSessionSpec extends SessionSpec {
     get("set")
 
     then:
-    getCookies("ratpack_lat", "/").length == 1
-    getCookies("ratpack_session", "/").length == 1
+    getCookies("ratpack_session_lat", "/").size() == 1
+    getCookies("ratpack_session", "/").size() == 1
 
     when:
     sleep(1100)
     get("get")
 
     then:
-    getCookies("ratpack_lat", "/").length == 0
-    getCookies("ratpack_session", "/").length == 0
+    getCookies("ratpack_session_lat", "/").size() == 0
+    getCookies("ratpack_session", "/").size() == 0
   }
 
   def "a malformed cookie (#value) results in an empty session"() {
@@ -263,8 +269,8 @@ class ClientSideSessionSpec extends SessionSpec {
     then:
     def values = get("foo").headers.getAll("Set-Cookie")
     values.findAll { it.contains("JSESSIONID") && it.contains("HTTPOnly") }.size() == 1
-    values.findAll { it.contains("ratpack_lat") && it.contains("HTTPOnly") }.size() == 1
-    values.findAll { it.contains("ratpack_session") && it.contains("HTTPOnly") }.size() == 1
+    values.findAll { it.contains("ratpack_session_lat_0") && it.contains("HTTPOnly") }.size() == 1
+    values.findAll { it.contains("ratpack_session_0") && it.contains("HTTPOnly") }.size() == 1
   }
 
   def "session cookies are not HTTPOnly, when config.isHttpOnly() is false"() {
@@ -287,8 +293,8 @@ class ClientSideSessionSpec extends SessionSpec {
 
     then:
     values.findAll { it.contains("JSESSIONID") && !it.contains("HTTPOnly") }.size() == 1
-    values.findAll { it.contains("ratpack_lat") && !it.contains("HTTPOnly") }.size() == 1
-    values.findAll { it.contains("ratpack_session") && !it.contains("HTTPOnly") }.size() == 1
+    values.findAll { it.contains("ratpack_session_lat_0") && !it.contains("HTTPOnly") }.size() == 1
+    values.findAll { it.contains("ratpack_session_0") && !it.contains("HTTPOnly") }.size() == 1
   }
 
   def "session cookies are secure, when config.isSecure() is true"() {
@@ -311,8 +317,8 @@ class ClientSideSessionSpec extends SessionSpec {
 
     then:
     values.findAll { it.contains("JSESSIONID") && it.contains("Secure") }.size() == 1
-    values.findAll { it.contains("ratpack_lat") && it.contains("Secure") }.size() == 1
-    values.findAll { it.contains("ratpack_session") && it.contains("Secure") }.size() == 1
+    values.findAll { it.contains("ratpack_session_lat_0") && it.contains("Secure") }.size() == 1
+    values.findAll { it.contains("ratpack_session_0") && it.contains("Secure") }.size() == 1
   }
 
   def "can use algorithm #algorithm"() {
@@ -343,6 +349,21 @@ class ClientSideSessionSpec extends SessionSpec {
 
     where:
     algorithm << SUPPORTED_ALGORITHMS
+  }
+
+  def "can not use algorithm #algorithm"() {
+    setup:
+    modules.clear()
+
+    when:
+    def crypto = new DefaultCrypto("key".bytes, algorithm)
+
+    then:
+    thrown InternalRatpackError
+    crypto == null
+
+    where:
+    algorithm << UNSUPPORTED_ALGORITHMS
   }
 
   def "changing the signing token invalidates the session"() {
@@ -413,13 +434,45 @@ class ClientSideSessionSpec extends SessionSpec {
         }
       }
     }
-    
+
     then:
     getText() == "ok"
     def values = get().headers.getAll("Set-Cookie")
-    values.findAll { it.contains("ratpack_lat") }.size() == 1
+    values.findAll { it.contains("ratpack_session_lat") }.size() == 1
   }
-  
+def "accessing empty session doesn't cause lat cookie to be set"() {
+    when:
+    handlers {
+      get("set") { Session session ->
+        session.set("test", "foo").then { render "ok" }
+      }
+      get("empty") { Session session ->
+        session.remove("test").then { render "ok" }
+      }
+      get("get") { Session session ->
+        session.get("test").then { render "ok" }
+      }
+    }
+
+    then:
+    get("set")
+    latCookies().size() == 1
+    dataCookies().size() == 1
+    get("empty")
+    latCookies().size() == 0 // unset
+    dataCookies().size() == 0
+    get("get")
+    latCookies().size() == 0
+    dataCookies().size() == 0
+  }
+
+  private List<Cookie> latCookies() {
+    getCookies("ratpack_session_lat", "/")
+  }
+
+  private List<Cookie> dataCookies() {
+    getCookies("ratpack_session", "/")
+  }
   def "can disable session ID"() {
     given:
     modules << new AbstractModule() {
@@ -446,5 +499,52 @@ class ClientSideSessionSpec extends SessionSpec {
     def r = get("store")
     r.headers.getAll("Set-Cookie").size() == 2 // last access token and session
     getText("load") == "bar" // session still works
+  }
+
+  def "can set cookie name"() {
+    given:
+    modules.clear()
+    bindings {
+      module SessionModule
+      module ClientSideSessionModule, {
+        it.sessionCookieName = "foo"
+      }
+    }
+    handlers {
+      get("foo") { Session session ->
+        render session.set("foo", "bar").map { "ok" }
+      }
+    }
+
+    when:
+    get("foo")
+
+    then:
+    getCookies("foo", "/").size() == 1
+    getCookies("foo_lat", "/").size() == 1
+  }
+
+  def "can set lat cookie name"() {
+    given:
+    modules.clear()
+    bindings {
+      module SessionModule
+      module ClientSideSessionModule, {
+        it.sessionCookieName = "foo"
+        it.lastAccessTimeCookieName = "lat"
+      }
+    }
+    handlers {
+      get("foo") { Session session ->
+        render session.set("foo", "bar").map { "ok" }
+      }
+    }
+
+    when:
+    get("foo")
+
+    then:
+    getCookies("foo", "/").size() == 1
+    getCookies("lat", "/").size() == 1
   }
 }

@@ -18,7 +18,7 @@ package ratpack.spring;
 
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import ratpack.registry.Registry;
+import ratpack.exec.registry.Registry;
 import ratpack.spring.internal.SpringRegistryBacking;
 
 /**
@@ -32,7 +32,7 @@ import ratpack.spring.internal.SpringRegistryBacking;
  *
  * import static ratpack.spring.Spring.spring;
  *
- * import static org.junit.Assert.assertEquals;
+ * import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * public class Example {
  *   public static void main(String[] args) throws Exception {

@@ -15,9 +15,9 @@
  */
 
 task writeVersionNumberFile {
-  def versionFile = file("src/main/resources/ratpack/ratpack-version.txt")
+  def versionFile = file("$buildDir/ratpack-version/ratpack/ratpack-version.txt")
   inputs.property "version", project.version
-  outputs.file versionFile
+  outputs.dir versionFile.parentFile.parentFile
 
   doFirst {
     assert versionFile.parentFile.mkdirs() || versionFile.parentFile.directory
@@ -25,11 +25,19 @@ task writeVersionNumberFile {
   }
 }
 
-processResources.dependsOn writeVersionNumberFile
-
 plugins.withType(EclipsePlugin) {
   eclipseProject.dependsOn writeVersionNumberFile
 }
 plugins.withType(IdeaPlugin) {
   ideaModule.dependsOn writeVersionNumberFile
+}
+
+sourceSets {
+  main {
+    resources {
+      srcDirs += [
+        tasks.named("writeVersionNumberFile")
+      ]
+    }
+  }
 }

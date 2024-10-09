@@ -16,10 +16,10 @@
 
 package ratpack.test.embed.internal;
 
-import ratpack.server.RatpackServer;
+import ratpack.core.server.RatpackServer;
 import ratpack.test.embed.EmbeddedApp;
 
-import static ratpack.util.Exceptions.uncheck;
+import static ratpack.func.Exceptions.uncheck;
 
 public abstract class EmbeddedAppSupport implements EmbeddedApp {
 

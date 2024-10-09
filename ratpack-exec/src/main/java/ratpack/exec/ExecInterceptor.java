@@ -35,8 +35,8 @@ import ratpack.func.Block;
  * import ratpack.test.exec.ExecHarness;
  *
  * import static java.lang.Thread.sleep;
- * import static org.junit.Assert.assertEquals;
- * import static org.junit.Assert.assertTrue;
+ * import static org.junit.jupiter.api.Assertions.assertEquals;
+ * import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * public class Example {
  *
@@ -110,7 +110,7 @@ import ratpack.func.Block;
  * }
  * }</pre>
  *
- * @see Execution#addInterceptor(ExecInterceptor, ratpack.func.Block)
+ * @see Execution#addInterceptor(ExecInterceptor, Block)
  */
 @FunctionalInterface
 public interface ExecInterceptor {
